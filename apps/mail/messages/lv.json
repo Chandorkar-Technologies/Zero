@@ -613,7 +613,7 @@
     "createEmail": {
       "invalidEmail": "Nederīga e-pasta adrese",
       "body": "Saturs",
-      "example": "zero@0.email",
+      "example": "hello@nubo.email",
       "attachments": "Pielikumi",
       "addMore": "Pievienot vēl",
       "dropFilesToAttach": "Ievelciet failus, lai pievienotu",

@@ -480,7 +480,7 @@
       },
       "connections": {
         "title": "E-Mail Verbindungen",
-        "description": "Verbinde deine E-Mail Benutzerkonten zu Zero.",
+        "description": "Verbinde deine E-Mail Benutzerkonten zu Nubo.",
         "disconnectTitle": "E-Mail-Konto trennen",
         "disconnectDescription": "Sind Sie sicher, dass Sie die Verbindung zu dieser E-Mail trennen möchten?",
         "cancel": "Abbrechen",
@@ -613,7 +613,7 @@
     "createEmail": {
       "invalidEmail": "Ungültige E-Mail-Adresse",
       "body": "Inhalt",
-      "example": "zero@0.email",
+      "example": "hello@nubo.email",
       "attachments": "Anhänge",
       "addMore": "Mehr hinzufügen",
       "dropFilesToAttach": "Dateien hier ablegen, um sie anzuhängen",
@@ -668,6 +668,6 @@
   "errorMessages": {
     "required_scopes_missing": "Uns fehlen die Berechtigungen, die für dein vollständiges Erlebnis erforderlich sind. Bitte melde dich erneut an und erlaube den angeforderten Zugriff.",
     "early_access_required": "Für die Anmeldung ist ein Early-Access erforderlich",
-    "unauthorized": "Zero konnte deine Daten nicht vom Drittanbieter laden. Bitte versuche es erneut."
+    "unauthorized": "Nubo konnte deine Daten nicht vom Drittanbieter laden. Bitte versuche es erneut."
   }
 }

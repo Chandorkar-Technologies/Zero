@@ -1,0 +1,24 @@
+{
+  "name": "@zero/imap-worker",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev --env local",
+    "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production"
+  },
+  "dependencies": {
+    "drizzle-orm": "catalog:",
+    "effect": "3.16.12",
+    "hono": "^4.7.8",
+    "imapflow": "1.1.1",
+    "wrangler": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@zero/tsconfig": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

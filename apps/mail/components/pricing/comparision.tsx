@@ -27,7 +27,7 @@ export default function Comparision() {
     if (attach) {
       toast.promise(
         attach({
-          productId: 'pro-example',
+          productId: 'plan_RgNh4LjI4yf8x7',
           successUrl: `${window.location.origin}/mail/inbox?success=true`,
         }),
         {
@@ -271,7 +271,7 @@ export default function Comparision() {
                   </div>
                 </div>
                 <div className="justify-center text-2xl font-semibold leading-loose text-white">
-                  Zero Pro
+                  Nubo Pro
                 </div>
               </div>
               <button
@@ -365,7 +365,7 @@ export default function Comparision() {
                     <PurpleThickCheck className="h-3 w-3" />
                   </div>
                   <div className="justify-center text-base font-normal leading-normal text-violet-400">
-                    $20 per month
+                    ₹399 per month
                   </div>
                 </div>
               </div>

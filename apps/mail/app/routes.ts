@@ -23,12 +23,18 @@ export default [
 
   layout('(routes)/layout.tsx', [
     route('/developer', '(routes)/developer/page.tsx'),
+    route('/meet', '(routes)/meet/page.tsx'),
+    route('/meet/:roomId', '(routes)/meet/[roomId]/page.tsx'),
     layout(
       '(routes)/mail/layout.tsx',
       prefix('/mail', [
         index('(routes)/mail/page.tsx'),
         route('/create', '(routes)/mail/create/page.tsx'),
         route('/compose', '(routes)/mail/compose/page.tsx'),
+        route('/kanban', '(routes)/mail/kanban/page.tsx'),
+        route('/teammates', '(routes)/mail/teammates/page.tsx'),
+        route('/notifications', '(routes)/mail/notifications/page.tsx'),
+        route('/attachments', '(routes)/mail/attachments/page.tsx'),
         route('/under-construction/:path', '(routes)/mail/under-construction/[path]/page.tsx'),
         route('/:folder', '(routes)/mail/[folder]/page.tsx'),
       ]),

@@ -28,7 +28,7 @@ import {
 import { PixelatedBackground, PixelatedLeft, PixelatedRight } from '@/components/home/pixelated-bg';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { signIn, useSession } from '@/lib/auth-client';
-import { Link, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Balancer } from 'react-wrap-balancer';
 import { Navigation } from '../navigation';
@@ -94,29 +94,9 @@ export default function HomeContent() {
           transition={{ duration: 0.5, delay: 0.4 }}
           className="mx-auto mb-4 max-w-2xl text-center text-base font-medium text-[#B7B7B7] md:text-lg"
         >
-          Zero is an AI-native email client that manages your inbox, so you don't have to.
+          Nubo is an AI-native email client that manages your inbox, so you don't have to.
         </motion.p>
         <p className="mb-4 ml-0.5 text-xs text-[#B7B7B7]/60">No credit card required.</p>
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="border-input/50 mb-6 inline-flex items-center gap-4 rounded-full border border-[#2A2A2A] bg-[#1E1E1E] px-4 py-1"
-        >
-          <Link to="https://yc.vc" target="_blank" className="flex items-center gap-2 text-sm">
-            Backed by
-            <span>
-              <img
-                src="/yc-small.svg"
-                alt="Y Combinator"
-                className="rounded-[2px]"
-                width={18}
-                height={18}
-              />
-            </span>
-            Combinator
-          </Link>
-        </motion.div>
 
         {/* Get Started button only visible for mobile screens */}
         <motion.div
@@ -1091,7 +1071,7 @@ export default function HomeContent() {
                         <div className="flex flex-1 items-center justify-start gap-3">
                           <div className="flex items-center justify-start gap-1">
                             <div className="text-base-gray-950 justify-start text-sm leading-none">
-                              Adam from Zero
+                              Adam from Nubo
                             </div>
                             <div className="justify-start text-center text-sm leading-none text-[#8C8C8C]">
                               [9]
@@ -1258,7 +1238,7 @@ export default function HomeContent() {
                     <div className="flex h-8 flex-1 items-center justify-start gap-1.5 overflow-hidden rounded-md bg-[#141414] pl-2.5 pr-1">
                       <div className="relative h-3 w-px rounded-full bg-white" />
                       <div className="flex-1 justify-start text-sm leading-none text-[#727272]">
-                        Ask Zero to do anything...
+                        Ask Nubo to do anything...
                       </div>
                       <div className="flex h-6 items-center justify-center gap-2.5 rounded bg-[#262626] px-1">
                         <CurvedArrow className="relative left-px mt-1 h-4 w-4 fill-black dark:fill-[#929292]" />

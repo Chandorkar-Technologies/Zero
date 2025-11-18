@@ -16,6 +16,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -34,7 +37,7 @@ import { useAnimations } from '@/hooks/use-animations';
 import { AnimatePresence, motion } from 'motion/react';
 import { MailDisplaySkeleton } from './mail-skeleton';
 import { useTRPC } from '@/providers/query-provider';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { cleanHtml } from '@/lib/email-utils';
@@ -44,7 +47,7 @@ import { cn, FOLDERS } from '@/lib/utils';
 import { m } from '@/paraglide/messages';
 import MailDisplay from './mail-display';
 import { useParams } from 'react-router';
-import { Inbox } from 'lucide-react';
+import { Inbox, KanbanSquare } from 'lucide-react';
 import { useQueryState } from 'nuqs';
 import { format } from 'date-fns';
 import { useAtom } from 'jotai';
@@ -59,6 +62,51 @@ const cleanNameDisplay = (name?: string) => {
   if (!name) return '';
   return name.replace(/["<>]/g, '');
 };
+
+// Component to fetch and display columns for a board
+function KanbanColumnsMenu({
+  boardId,
+  onSelect,
+}: {
+  boardId: string;
+  threadId: string;
+  connectionId: string;
+  onSelect: (columnId: string) => void;
+}) {
+  const trpc = useTRPC();
+  const { data: boardData } = useQuery(
+    trpc.kanban.getBoardWithColumns.queryOptions({ boardId })
+  );
+
+  if (!boardData) {
+    return <DropdownMenuItem disabled>Loading columns...</DropdownMenuItem>;
+  }
+
+  if (boardData.columns.length === 0) {
+    return <DropdownMenuItem disabled>No columns available</DropdownMenuItem>;
+  }
+
+  return (
+    <>
+      {boardData.columns
+        .sort((a, b) => a.position - b.position)
+        .map((column) => (
+          <DropdownMenuItem
+            key={column.id}
+            onClick={() => onSelect(column.id)}
+          >
+            {column.color && (
+              <div
+                className="mr-2 h-3 w-3 rounded-full"
+                style={{ backgroundColor: column.color }}
+              />
+            )}
+            {column.name}
+          </DropdownMenuItem>
+        ))}
+    </>
+  );
+}
 
 interface ThreadDisplayProps {
   threadParam?: any;
@@ -186,6 +234,27 @@ export function ThreadDisplay() {
   const trpc = useTRPC();
   const { mutateAsync: toggleImportant } = useMutation(trpc.mail.toggleImportant.mutationOptions());
   const [, setIsComposeOpen] = useQueryState('isComposeOpen');
+
+  // Kanban queries and mutations
+  const { data: kanbanBoards, isLoading: kanbanBoardsLoading, error: kanbanBoardsError } = useQuery(trpc.kanban.getBoards.queryOptions({}));
+
+  // Debug logging
+  console.log('[ThreadDisplay] Kanban boards debug:', {
+    kanbanBoards,
+    isLoading: kanbanBoardsLoading,
+    error: kanbanBoardsError,
+    boardCount: kanbanBoards?.length,
+  });
+
+  const { mutate: addToKanban } = useMutation({
+    ...trpc.kanban.addEmailToColumn.mutationOptions(),
+    onSuccess: () => {
+      toast.success('Email added to Kanban board');
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || 'Failed to add to Kanban');
+    },
+  });
 
   // Get optimistic state for this thread
   const optimisticState = useOptimisticThreadState(id ?? '');
@@ -737,7 +806,7 @@ export function ThreadDisplay() {
                     <Sparkles className="mr-1 h-3.5 w-3.5 fill-[#959595]" />
                     <div className="flex items-center justify-center gap-2.5 px-0.5">
                       <div className="text-base-gray-950 justify-start text-sm leading-none">
-                        Zero chat
+                        Nubo chat
                       </div>
                     </div>
                   </button>
@@ -921,6 +990,48 @@ export function ThreadDisplay() {
                         <Lightning className="fill-iconLight dark:fill-iconDark mr-2" />
                         {m['common.mail.markAsImportant']()}
                       </DropdownMenuItem>
+                    )}
+                    {(() => {
+                      const shouldShow = kanbanBoards && kanbanBoards.length > 0 && id && emailData?.connectionId;
+                      console.log('[ThreadDisplay] Add to Kanban condition check:', {
+                        kanbanBoards: !!kanbanBoards,
+                        boardCount: kanbanBoards?.length,
+                        id,
+                        connectionId: emailData?.connectionId,
+                        shouldShow,
+                      });
+                      return shouldShow;
+                    })() && (
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                          <KanbanSquare className="mr-2 h-4 w-4" />
+                          <span>Add to Kanban</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="max-h-[300px] overflow-y-auto">
+                          {kanbanBoards.map((board) => (
+                            <DropdownMenuSub key={board.id}>
+                              <DropdownMenuSubTrigger>
+                                {board.name}
+                              </DropdownMenuSubTrigger>
+                              <DropdownMenuSubContent>
+                                <KanbanColumnsMenu
+                                  boardId={board.id}
+                                  threadId={id}
+                                  connectionId={emailData.connectionId}
+                                  onSelect={(columnId) => {
+                                    addToKanban({
+                                      columnId,
+                                      threadId: id,
+                                      connectionId: emailData.connectionId,
+                                      position: 0,
+                                    });
+                                  }}
+                                />
+                              </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                          ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
                     )}
                   </DropdownMenuContent>
                 </DropdownMenu>

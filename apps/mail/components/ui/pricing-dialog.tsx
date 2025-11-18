@@ -19,23 +19,29 @@ export function PricingDialog() {
   const [isLoading, setIsLoading] = useState(false);
   const [isAnnual, setIsAnnual] = useState(false);
   const [open, setOpen] = useQueryState('pricingDialog');
-  const monthlyPrice = 20;
-  const annualPrice = monthlyPrice * 0.5; // 50% off for annual billing
+  const monthlyPrice = 399;
+  const annualPrice = 199; // Annual price (₹2388/year)
 
   const handleUpgrade = async () => {
     if (attach) {
       setIsLoading(true);
-      toast.promise(
-        attach({
-          productId: isAnnual ? 'pro_annual' : 'pro-example',
+      // Close the pricing dialog before opening Razorpay to prevent overlay conflicts
+      setOpen(null);
+
+      // Wait for dialog to fully close and DOM to update
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      try {
+        await attach({
+          productId: isAnnual ? 'plan_RgNhIPe6xvU6xz' : 'plan_RgNh4LjI4yf8x7',
           successUrl: `${window.location.origin}/mail/inbox?success=true`,
-        }),
-        {
-          success: 'Redirecting to payment...',
-          error: 'Failed to process upgrade. Please try again later.',
-          finally: () => setIsLoading(false),
-        },
-      );
+        });
+      } catch (error) {
+        console.error('Failed to process upgrade:', error);
+        toast.error('Failed to process upgrade. Please try again later.');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -92,10 +98,10 @@ export function PricingDialog() {
               <div className="flex flex-col items-start justify-start gap-2 self-stretch">
                 <div className="inline-flex items-end justify-start gap-1 self-stretch">
                   <div className="justify-center text-4xl font-semibold leading-10 text-white">
-                    ${isAnnual ? annualPrice : monthlyPrice}
+                    ₹{isAnnual ? annualPrice : monthlyPrice}
                     {isAnnual && (
                       <span className="ml-2 text-base font-normal text-white/40 line-through">
-                        ${monthlyPrice}
+                        ₹{monthlyPrice}
                       </span>
                     )}
                   </div>

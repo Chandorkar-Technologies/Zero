@@ -613,7 +613,7 @@
     "createEmail": {
       "invalidEmail": "Dirección de correo electrónico no válida",
       "body": "Cuerpo",
-      "example": "zero@0.email",
+      "example": "hello@nubo.email",
       "attachments": "Archivos adjuntos",
       "addMore": "Añadir más",
       "dropFilesToAttach": "Suelte los archivos para adjuntarlos",

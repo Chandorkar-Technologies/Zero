@@ -6,16 +6,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '../ui/dialog';
+import { AddImapDialog } from './add-imap-dialog';
 import { useBilling } from '@/hooks/use-billing';
 import { emailProviders } from '@/lib/constants';
 import { authClient } from '@/lib/auth-client';
-import { Plus, UserPlus } from 'lucide-react';
+import { UserPlus, Mail } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { m } from '@/paraglide/messages';
 import { motion } from 'motion/react';
 import { Button } from '../ui/button';
 import { cn } from '@/lib/utils';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 export const AddConnectionDialog = ({
@@ -28,6 +29,7 @@ export const AddConnectionDialog = ({
   onOpenChange?: (open: boolean) => void;
 }) => {
   const { connections, attach } = useBilling();
+  const [showImapDialog, setShowImapDialog] = useState(false);
 
   const canCreateConnection = useMemo(() => {
     if (!connections?.remaining && !connections?.unlimited) return false;
@@ -130,15 +132,22 @@ export const AddConnectionDialog = ({
             whileTap={{ scale: 0.97 }}
           >
             <Button
+              disabled={!canCreateConnection}
               variant="outline"
-              className="h-24 w-full flex-col items-center justify-center gap-2 border-dashed"
+              className="h-24 w-full flex-col items-center justify-center gap-2"
+              onClick={() => {
+                onOpenChange?.(false);
+                setShowImapDialog(true);
+              }}
             >
-              <Plus className="h-12 w-12" />
-              <span className="text-xs">{m['pages.settings.connections.moreComingSoon']()}</span>
+              <Mail className="size-6!" />
+              <span className="text-xs">Other Email (IMAP/SMTP)</span>
             </Button>
           </motion.div>
         </motion.div>
       </DialogContent>
+
+      <AddImapDialog open={showImapDialog} onOpenChange={setShowImapDialog} />
     </Dialog>
   );
 };

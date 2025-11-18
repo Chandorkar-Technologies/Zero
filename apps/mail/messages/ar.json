@@ -613,7 +613,7 @@
     "createEmail": {
       "invalidEmail": "عنوان البريد الإلكتروني غير صالح",
       "body": "المحتوى",
-      "example": "zero@0.email",
+      "example": "hello@nubo.email",
       "attachments": "المرفقات ({count})",
       "addMore": "إضافة المزيد",
       "dropFilesToAttach": "أسقط الملفات لإرفاقها",

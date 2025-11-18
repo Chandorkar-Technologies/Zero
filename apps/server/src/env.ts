@@ -1,5 +1,6 @@
 import type { ThinkingMCP, ThreadSyncWorker, WorkflowRunner, ZeroDB, ZeroMCP } from './main';
 import type { ShardRegistry, ZeroAgent, ZeroDriver } from './routes/agent';
+import type { MeetingRoom } from './routes/meeting-room';
 
 import { env as _env } from 'cloudflare:workers';
 import type { QueryableHandler } from 'dormroom';
@@ -12,8 +13,8 @@ export type ZeroEnv = {
   ZERO_MCP: DurableObjectNamespace<ZeroMCP & QueryableHandler>;
   THINKING_MCP: DurableObjectNamespace<ThinkingMCP & QueryableHandler>;
   WORKFLOW_RUNNER: DurableObjectNamespace<WorkflowRunner & QueryableHandler>;
-
   THREAD_SYNC_WORKER: DurableObjectNamespace<ThreadSyncWorker>;
+  MEETING_ROOM: DurableObjectNamespace<MeetingRoom>;
   SYNC_THREADS_WORKFLOW: Workflow;
   SYNC_THREADS_COORDINATOR_WORKFLOW: Workflow;
   HYPERDRIVE: { connectionString: string };
@@ -49,6 +50,7 @@ export type ZeroEnv = {
   BETTER_AUTH_URL: string;
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
+  FORCE_GOOGLE_AUTH?: string;
   RESEND_API_KEY: string;
   VITE_PUBLIC_POSTHOG_KEY: string;
   VITE_PUBLIC_POSTHOG_HOST: string;
@@ -70,7 +72,9 @@ export type ZeroEnv = {
   GROQ_API_KEY: string;
   EARLY_ACCESS_ENABLED: string;
   GOOGLE_GENERATIVE_AI_API_KEY: string;
-  AUTUMN_SECRET_KEY: string;
+  RAZORPAY_KEY_ID: string;
+  RAZORPAY_KEY_SECRET: string;
+  RAZORPAY_WEBHOOK_SECRET: string;
   AI_SYSTEM_PROMPT: string;
   PERPLEXITY_API_KEY: string;
   TWILIO_ACCOUNT_SID: string;

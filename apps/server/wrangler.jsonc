@@ -67,6 +67,10 @@
             "name": "SHARD_REGISTRY",
             "class_name": "ShardRegistry",
           },
+          {
+            "name": "MEETING_ROOM",
+            "class_name": "MeetingRoom",
+          },
         ],
       },
       "workflows": [
@@ -144,6 +148,10 @@
         {
           "tag": "v9",
           "new_sqlite_classes": ["ShardRegistry"],
+        },
+        {
+          "tag": "v10",
+          "new_classes": ["MeetingRoom"],
         },
 
       ],
@@ -287,6 +295,10 @@
             "name": "SHARD_REGISTRY",
             "class_name": "ShardRegistry",
           },
+          {
+            "name": "MEETING_ROOM",
+            "class_name": "MeetingRoom",
+          },
 
         ],
       },
@@ -376,6 +388,10 @@
           "tag": "v10",
           "new_sqlite_classes": ["ShardRegistry"],
         },
+        {
+          "tag": "v11",
+          "new_classes": ["MeetingRoom"],
+        },
 
       ],
       "observability": {
@@ -384,15 +400,15 @@
       "hyperdrive": [
         {
           "binding": "HYPERDRIVE",
-          "id": "57834ddb6716440496c8836f6d99bc9a",
+          "id": "ae4405addb934ccdb006a6e701d725fa",
           "localConnectionString": "postgresql://postgres:postgres@localhost:5432/zerodotemail",
         },
       ],
       "vars": {
         "NODE_ENV": "development",
-        "COOKIE_DOMAIN": "0.email",
-        "VITE_PUBLIC_BACKEND_URL": "https://sapi.0.email",
-        "VITE_PUBLIC_APP_URL": "https://staging.0.email",
+        "COOKIE_DOMAIN": "nubo.email",
+        "VITE_PUBLIC_BACKEND_URL": "https://sapi.nubo.email",
+        "VITE_PUBLIC_APP_URL": "https://staging.nubo.email",
         "DISABLE_CALLS": "",
         "DROP_AGENT_TABLES": "false",
         "THREAD_SYNC_MAX_COUNT": "60",
@@ -458,6 +474,9 @@
       "triggers": {
         "crons": ["0 0 * * *", "0 * * * *"],
       },
+      "limits": {
+        "cpu_ms": 300000,
+      },
       "r2_buckets": [
         {
           "binding": "THREADS_BUCKET",
@@ -483,7 +502,7 @@
       "hyperdrive": [
         {
           "binding": "HYPERDRIVE",
-          "id": "b1be316b45fb439a9e54b74ecc20aa21",
+          "id": "ae4405addb934ccdb006a6e701d725fa",
           "localConnectionString": "postgresql://postgres:postgres@localhost:5432/zerodotemail",
         },
       ],
@@ -520,6 +539,10 @@
           {
             "name": "SHARD_REGISTRY",
             "class_name": "ShardRegistry",
+          },
+          {
+            "name": "MEETING_ROOM",
+            "class_name": "MeetingRoom",
           },
 
         ],
@@ -577,10 +600,6 @@
           "new_classes": ["ZeroDB"],
         },
         {
-          "tag": "v4",
-          "new_sqlite_classes": ["ZeroAgent"],
-        },
-        {
           "tag": "v5",
           "deleted_classes": ["DurableMailbox"],
         },
@@ -604,18 +623,23 @@
           "tag": "v10",
           "new_sqlite_classes": ["ShardRegistry"],
         },
+        {
+          "tag": "v11",
+          "new_classes": ["MeetingRoom"],
+        },
 
       ],
       "vars": {
         "NODE_ENV": "production",
-        "COOKIE_DOMAIN": "0.email",
-        "VITE_PUBLIC_BACKEND_URL": "https://api.0.email",
-        "VITE_PUBLIC_APP_URL": "https://0.email",
+        "COOKIE_DOMAIN": ".nubo.email",
+        "VITE_PUBLIC_BACKEND_URL": "https://api.nubo.email",
+        "VITE_PUBLIC_APP_URL": "https://nubo.email",
         "DISABLE_CALLS": "true",
         "DROP_AGENT_TABLES": "false",
         "THREAD_SYNC_MAX_COUNT": "60",
         "THREAD_SYNC_LOOP": "true",
         "DISABLE_WORKFLOWS": "true",
+        "USE_OPENAI": "false",
         "OTEL_EXPORTER_OTLP_ENDPOINT": "https://api.axiom.co/v1/traces",
         "OTEL_SERVICE_NAME": "zero-email-server-production",
         "DD_API_KEY": "",
@@ -625,43 +649,43 @@
       "kv_namespaces": [
         {
           "binding": "gmail_history_id",
-          "id": "10005d74e84f4f18a17c9618d9e9cecf",
+          "id": "e4075a6831b74bd9898a8bdfa0124b3b",
         },
         {
           "binding": "gmail_processing_threads",
-          "id": "3348ff0976284269a8d8a5e6e4c04c56",
+          "id": "8be4d7e8d6494da1858941867c2a5179",
         },
         {
           "binding": "subscribed_accounts",
-          "id": "5902b3b948ff4c4ba1aedbbbbe25503d",
+          "id": "296e90acb48b451780fcb6f6685ff3d2",
         },
         {
           "binding": "connection_labels",
-          "id": "9a13290a55ad4f62824c67005dd66f6f",
+          "id": "477037f0ee10480f9877c5b0bc867c24",
         },
         {
           "binding": "prompts_storage",
-          "id": "2a4ebda553f3456085cfcf92cc0f570f",
+          "id": "e7ecf40058d24f22bec0e51b474605f0",
         },
         {
           "binding": "gmail_sub_age",
-          "id": "0591e91fffcc4675aaf00f909bee77d2",
+          "id": "33956af98228422fa7fdf4fd1183fee9",
         },
         {
           "binding": "pending_emails_status",
-          "id": "e65f8f72441d4eadb9d5ae36269316c9",
+          "id": "6dfc2784c2724540b4fbe42db0a53eed",
         },
         {
           "binding": "pending_emails_payload",
-          "id": "e65f8f72441d4eadb9d5ae36269316c9_payload",
+          "id": "6dfc2784c2724540b4fbe42db0a53eed",
         },
         {
           "binding": "scheduled_emails",
-          "id": "e65f8f72441d4eadb9d5ae36269316c9_scheduled",
+          "id": "4db4a8f3ee2448c3b307bc9d8e698437",
         },
         {
           "binding": "snoozed_emails",
-          "id": "f0952e9c3b024cb499c4b9dfe8bb603e",
+          "id": "f9469389ca82434095459b2d34800474",
         },
       ],
     },

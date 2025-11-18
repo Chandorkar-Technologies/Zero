@@ -15,7 +15,7 @@ import {
   LockIcon,
   Clock,
 } from '@/components/icons/icons';
-import { MessageSquareIcon } from 'lucide-react';
+import { MessageSquareIcon, KanbanSquare, UserCircle, Bell, Paperclip, Video } from 'lucide-react';
 import { m } from '@/paraglide/messages';
 
 export interface NavItem {
@@ -69,6 +69,46 @@ export const navigationConfig: Record<string, NavConfig> = {
             url: '/mail/sent',
             icon: Plane2,
             shortcut: 'g + t',
+          },
+          {
+            id: 'meet',
+            title: 'Nubo Meet',
+            url: '/meet',
+            icon: Video,
+            shortcut: 'g + v',
+          },
+        ],
+      },
+      {
+        title: 'Views',
+        items: [
+          {
+            id: 'kanban',
+            title: m['navigation.sidebar.kanban'](),
+            url: '/mail/kanban',
+            icon: KanbanSquare,
+            shortcut: 'g + k',
+          },
+          {
+            id: 'people',
+            title: m['navigation.sidebar.people'](),
+            url: '/mail/teammates',
+            icon: UserCircle,
+            shortcut: 'g + p',
+          },
+          {
+            id: 'notifications',
+            title: m['navigation.sidebar.notifications'](),
+            url: '/mail/notifications',
+            icon: Bell,
+            shortcut: 'g + n',
+          },
+          {
+            id: 'attachments',
+            title: m['navigation.sidebar.attachments'](),
+            url: '/mail/attachments',
+            icon: Paperclip,
+            shortcut: 'g + f',
           },
         ],
       },
@@ -132,6 +172,22 @@ export const navigationConfig: Record<string, NavConfig> = {
       //     },
       //   ],
       // },
+    ],
+  },
+  meet: {
+    path: '/meet',
+    sections: [
+      {
+        title: 'Navigation',
+        items: [
+          {
+            title: m['common.actions.back'](),
+            url: '/mail',
+            icon: ArrowLeft,
+            isBackButton: true,
+          },
+        ],
+      },
     ],
   },
   settings: {

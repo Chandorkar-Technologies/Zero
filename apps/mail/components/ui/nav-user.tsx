@@ -215,13 +215,13 @@ export function NavUser() {
                           className="rounded-xl"
                           src={
                             (activeAccount.picture ?? undefined) ||
-                            (session.user.image ?? undefined)
+                            (session?.user?.image ?? undefined)
                           }
-                          alt={activeAccount.name || session.user.name || 'User'}
+                          alt={activeAccount.name || session?.user?.name || 'User'}
                         />
                         <AvatarFallback className="rounded-xl">
                           <span>
-                            {(activeAccount.name || session.user.name || 'User')
+                            {(activeAccount.name || session?.user?.name || 'User')
                               .split(' ')
                               .map((n) => n[0])
                               .join('')
@@ -232,7 +232,7 @@ export function NavUser() {
                       </Avatar>
                       <div className="w-full">
                         <div className="flex items-center justify-center gap-0.5 text-sm font-medium">
-                          {activeAccount.name || session.user.name || 'User'}
+                          {activeAccount.name || session?.user?.name || 'User'}
                           {isPro && (
                             <BadgeCheck
                               className="h-4 w-4 text-white dark:text-[#141414]"
@@ -637,14 +637,14 @@ export function NavUser() {
           <div className="mt-[2px] flex flex-col items-start gap-1 space-y-1">
             <div className="flex items-center gap-1 text-[13px] leading-none text-black dark:text-white">
               <p className={cn('max-w-[14.5ch] truncate text-[13px]')}>
-                {activeAccount?.name || session.user.name || 'User'}
+                {activeAccount?.name || session?.user?.name || 'User'}
               </p>
               {isPro ? (
                 <BadgeCheck className="h-4 w-4 text-white dark:text-[#141414]" fill="#1D9BF0" />
               ) : null}
             </div>
             <div className="h-5 max-w-[200px] overflow-hidden truncate text-xs font-normal leading-none text-[#898989]">
-              {activeAccount?.email || session.user.email}
+              {activeAccount?.email || session?.user?.email}
             </div>
             {!isPro && (
               <button

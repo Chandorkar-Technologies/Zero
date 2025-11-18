@@ -18,7 +18,7 @@ export const connectionsRouter = router({
       const connections = await db.findManyConnections();
 
       const disconnectedIds = connections
-        .filter((c) => !c.accessToken || !c.refreshToken)
+        .filter((c) => c.providerId !== 'imap' && (!c.accessToken || !c.refreshToken))
         .map((c) => c.id);
 
       return {

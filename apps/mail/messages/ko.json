@@ -613,7 +613,7 @@
     "createEmail": {
       "invalidEmail": "유효하지 않은 이메일 주소",
       "body": "본문",
-      "example": "zero@0.email",
+      "example": "hello@nubo.email",
       "attachments": "첨부 파일",
       "addMore": "더 추가하기",
       "dropFilesToAttach": "첨부할 파일 끌어놓기",

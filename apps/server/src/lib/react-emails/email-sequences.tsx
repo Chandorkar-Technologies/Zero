@@ -144,7 +144,7 @@ export const Mail0ProEmail = ({ name }: EmailProps) => {
               It's the full Mail0 experience, no limits.
             </Text>
             <Text style={text}>
-              <Link href="https://0.email/pricing" style={link}>
+              <Link href="https://nubo.email/pricing" style={link}>
                 Try it free for 7 days, no strings attached
               </Link>
             </Text>

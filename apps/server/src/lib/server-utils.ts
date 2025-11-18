@@ -551,12 +551,18 @@ export const getActiveConnection = async () => {
   const db = await getZeroDB(sessionUser.id);
   const userData = await db.findUser();
 
+  // Check if default connection exists (supports both OAuth and IMAP)
   if (userData?.defaultConnectionId) {
     const activeConnection = await db.findUserConnection(userData.defaultConnectionId);
-    if (activeConnection) return activeConnection;
+    if (activeConnection) {
+      return activeConnection;
+    }
   }
 
-  const firstConnection = await db.findFirstConnection();
+  // Find first available connection (OAuth or IMAP)
+  const connections = await db.findManyConnections();
+  const firstConnection = connections[0];
+
   if (!firstConnection) {
     try {
       if (auth) {
@@ -566,14 +572,19 @@ export const getActiveConnection = async () => {
     } catch (err) {
       console.warn(`[getActiveConnection] Session cleanup failed for user ${sessionUser.id}:`, err);
     }
-    console.error(`No connections found for user ${sessionUser.id}`);
-    throw new Error('No connections found for user');
+    console.error(`No connections found for user ${sessionUser.id}.`);
+    throw new Error('No connections found for user.');
   }
 
   return firstConnection;
 };
 
 export const connectionToDriver = (activeConnection: typeof connection.$inferSelect) => {
+  // IMAP connections don't use OAuth tokens, so skip them
+  if (activeConnection.providerId === 'imap') {
+    throw new Error(`IMAP connections are not supported by connectionToDriver`);
+  }
+
   if (!activeConnection.accessToken || !activeConnection.refreshToken) {
     throw new Error(`Invalid connection ${JSON.stringify(activeConnection?.id)}`);
   }
@@ -616,4 +627,60 @@ export const resetConnection = async (connectionId: string) => {
     })
     .where(eq(connection.id, connectionId));
   await conn.end();
+};
+
+/**
+ * Fetch IMAP emails from R2 bucket
+ * IMAP emails are stored as JSON objects in R2 with key format: ${connectionId}/${threadId}.json
+ */
+export const fetchImapEmailsFromR2 = async (
+  connectionId: string,
+  threadsBucket: any, // R2Bucket type to avoid bundle size issues
+  options: {
+    folder?: string;
+    maxResults?: number;
+    cursor?: string;
+  } = {},
+): Promise<{ threads: { id: string; historyId: string | null; $raw?: unknown }[]; nextPageToken: string | null }> => {
+  const { maxResults = 50 } = options;
+
+  console.log(`[fetchImapEmailsFromR2] Fetching emails for connection ${connectionId}`);
+
+  // List all objects with the connection prefix
+  const listed = await threadsBucket.list({
+    prefix: `${connectionId}/`,
+    limit: maxResults,
+  });
+
+  console.log(`[fetchImapEmailsFromR2] Found ${listed.objects.length} email objects in R2`);
+
+  // Fetch each thread object
+  const threads: { id: string; historyId: string | null; $raw?: unknown }[] = [];
+
+  for (const obj of listed.objects) {
+    try {
+      const threadObject = await threadsBucket.get(obj.key);
+      if (!threadObject) continue;
+
+      const threadData = JSON.parse(await threadObject.text());
+
+      // Extract thread ID from key (format: connectionId/threadId.json)
+      const threadId = obj.key.split('/')[1]?.replace('.json', '') || threadData.latest?.threadId || threadData.latest?.id;
+
+      threads.push({
+        id: threadId,
+        historyId: null, // IMAP doesn't have history IDs like Gmail
+        $raw: threadData, // Store the full thread data for later retrieval
+      });
+    } catch (error) {
+      console.error(`[fetchImapEmailsFromR2] Failed to parse thread object ${obj.key}:`, error);
+    }
+  }
+
+  console.log(`[fetchImapEmailsFromR2] Successfully fetched ${threads.length} threads`);
+
+  return {
+    threads,
+    nextPageToken: listed.truncated ? listed.cursor : null,
+  };
 };

@@ -613,7 +613,7 @@
     "createEmail": {
       "invalidEmail": "Endereço de email inválido",
       "body": "Corpo",
-      "example": "zero@0.email",
+      "example": "hello@nubo.email",
       "attachments": "Anexos",
       "addMore": "Adicionar mais",
       "dropFilesToAttach": "Arraste e solte arquivos para anexar",
@@ -668,6 +668,6 @@
   "errorMessages": {
     "required_scopes_missing": "Estamos sem as permissões necessárias para criar sua experiência completa. Por favor, faça login novamente e permita o acesso solicitado.",
     "early_access_required": "É necessário acesso antecipado para fazer login",
-    "unauthorized": "O Zero não conseguiu carregar seus dados do provedor terceirizado. Por favor, tente novamente."
+    "unauthorized": "O Nubo não conseguiu carregar seus dados do provedor terceirizado. Por favor, tente novamente."
   }
 }

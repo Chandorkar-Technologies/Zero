@@ -480,7 +480,7 @@
       },
       "connections": {
         "title": "Connexions Correu",
-        "description": "Connecta els teus comptes de correu a Zero.",
+        "description": "Connecta els teus comptes de correu a Nubo.",
         "disconnectTitle": "Desconnecta el compte de correu.",
         "disconnectDescription": "Estàs segur que vols desconnectar aquest correu?\n\n\n\n\n\n\n\n",
         "cancel": "Cancel·lar",
@@ -613,7 +613,7 @@
     "createEmail": {
       "invalidEmail": "Adreça de correu electrònic no vàlida",
       "body": "Cos",
-      "example": "zero@0.email",
+      "example": "hello@nubo.email",
       "attachments": "Adjunts",
       "addMore": "Afegir més",
       "dropFilesToAttach": "Arrossega arxius per adjuntar",

@@ -39,8 +39,8 @@ const PRICING_CONSTANTS = {
     pro: 'outline outline-2 outline-offset-[3.5px] outline-[#2D2D2D]',
     divider: 'h-0 self-stretch outline outline-1 outline-offset-[-0.50px] outline-white/10',
   },
-  MONTHLY_PRICE: 20,
-  ANNUAL_DISCOUNT: 0.5,
+  MONTHLY_PRICE: 399,
+  ANNUAL_DISCOUNT: 199/399, // Rs. 199/month when billed annually
 } as const;
 
 const handleGoogleSignIn = (
@@ -214,7 +214,7 @@ export default function PricingCard() {
               <div className="flex flex-col items-start justify-start gap-2 self-stretch">
                 <div className="inline-flex items-end justify-start gap-1 self-stretch">
                   <div className="justify-center text-4xl font-semibold leading-10 text-white">
-                    ${isAnnual ? annualPrice : monthlyPrice}
+                    ₹{isAnnual ? Math.round(annualPrice) : monthlyPrice}
                   </div>
                   <div className="flex items-center justify-center gap-2.5 pb-0.5">
                     <div className="justify-center text-sm font-medium leading-tight text-white/40">

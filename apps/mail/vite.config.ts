@@ -13,10 +13,17 @@ const ReactCompilerConfig = {
 };
 
 export default defineConfig({
+  define: {
+    'import.meta.env.VITE_PUBLIC_BACKEND_URL': JSON.stringify(process.env.VITE_PUBLIC_BACKEND_URL || ''),
+    'import.meta.env.VITE_PUBLIC_APP_URL': JSON.stringify(process.env.VITE_PUBLIC_APP_URL || ''),
+  },
   plugins: [
     oxlintPlugin(),
     reactRouter(),
-    cloudflare(),
+    cloudflare({
+      configPath: './wrangler.jsonc',
+      environment: process.env.CLOUDFLARE_ENV,
+    }),
     babel({
       filter: /\.[jt]sx?$/,
       babelConfig: {

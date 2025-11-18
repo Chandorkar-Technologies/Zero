@@ -480,7 +480,7 @@
       },
       "connections": {
         "title": "E-posta Bağlantıları",
-        "description": "E-posta hesaplarınızı Zero'ya bağlayın.",
+        "description": "E-posta hesaplarınızı Nubo'ya bağlayın.",
         "disconnectTitle": "E-posta Hesabını Bağlantıyı Kes",
         "disconnectDescription": "Bu e-posta bağlantısını kesmek istediğinizden emin misiniz?",
         "cancel": "İptal",
@@ -613,7 +613,7 @@
     "createEmail": {
       "invalidEmail": "Geçersiz e-posta adresi",
       "body": "İçerik",
-      "example": "zero@0.email",
+      "example": "hello@nubo.email",
       "attachments": "Ekler",
       "addMore": "Daha fazla ekle",
       "dropFilesToAttach": "Eklemek için dosyaları bırakın",
@@ -668,6 +668,6 @@
   "errorMessages": {
     "required_scopes_missing": "Tam deneyiminizi oluşturmak için gereken izinler eksik. Lütfen tekrar giriş yapın ve istenen erişime izin verin.",
     "early_access_required": "Giriş yapmak için erken erişim gereklidir",
-    "unauthorized": "Zero, verilerinizi 3. taraf sağlayıcıdan yükleyemedi. Lütfen tekrar deneyin."
+    "unauthorized": "Nubo, verilerinizi 3. taraf sağlayıcıdan yükleyemedi. Lütfen tekrar deneyin."
   }
 }

@@ -9,11 +9,15 @@ import {
   connection,
   note,
   session,
+  subscription,
   user,
   userHotkeys,
   userSettings,
   writingStyleMatrix,
   emailTemplate,
+  kanbanBoard,
+  kanbanColumn,
+  kanbanEmailMapping,
 } from './db/schema';
 import {
   toAttachmentFiles,
@@ -27,6 +31,7 @@ import { getZeroAgent, getZeroDB, verifyToken } from './lib/server-utils';
 import { SyncThreadsWorkflow } from './workflows/sync-threads-workflow';
 import { ShardRegistry, ZeroAgent, ZeroDriver } from './routes/agent';
 import { ThreadSyncWorker } from './routes/agent/sync-worker';
+import { MeetingRoom } from './routes/meeting-room';
 import { oAuthDiscoveryMetadata } from 'better-auth/plugins';
 import { EProviders, type IEmailSendBatch } from './types';
 import { eq, and, desc, asc, inArray } from 'drizzle-orm';
@@ -41,7 +46,7 @@ import { agentsMiddleware } from 'hono-agents';
 import { ZeroMCP } from './routes/agent/mcp';
 import { publicRouter } from './routes/auth';
 import { WorkflowRunner } from './pipelines';
-import { autumnApi } from './routes/autumn';
+import { razorpayApi } from './routes/razorpay';
 import { initTracing } from './lib/tracing';
 import { env, type ZeroEnv } from './env';
 import type { HonoContext } from './ctx';
@@ -200,10 +205,100 @@ export class DbRpcDO extends RpcTarget {
   async updateEmailTemplate(templateId: string, data: Partial<typeof emailTemplate.$inferInsert>) {
     return await this.mainDo.updateEmailTemplate(this.userId, templateId, data);
   }
+
+  // Subscription management methods
+  async findSubscription() {
+    return await this.mainDo.findSubscription(this.userId);
+  }
+
+  async insertSubscription(data: typeof subscription.$inferInsert) {
+    return await this.mainDo.insertSubscription(data);
+  }
+
+  async updateSubscription(data: Partial<typeof subscription.$inferInsert>) {
+    return await this.mainDo.updateSubscription(this.userId, data);
+  }
+
+  async deleteSubscription() {
+    return await this.mainDo.deleteSubscription(this.userId);
+  }
+
+  async updateSubscriptionByRazorpayId(razorpaySubscriptionId: string, data: Partial<typeof subscription.$inferInsert>) {
+    return await this.mainDo.updateSubscriptionByRazorpayId(razorpaySubscriptionId, data);
+  }
+
+  // Kanban Board Methods
+  async createKanbanBoard(connectionId: string, name: string, isDefault: boolean = false) {
+    return await this.mainDo.createKanbanBoard(this.userId, connectionId, name, isDefault);
+  }
+
+  async getKanbanBoards(connectionId?: string) {
+    return await this.mainDo.getKanbanBoards(this.userId, connectionId);
+  }
+
+  async getKanbanBoardById(boardId: string) {
+    return await this.mainDo.getKanbanBoardById(boardId);
+  }
+
+  async updateKanbanBoard(boardId: string, updates: Partial<typeof kanbanBoard.$inferInsert>) {
+    return await this.mainDo.updateKanbanBoard(boardId, updates);
+  }
+
+  async deleteKanbanBoard(boardId: string) {
+    return await this.mainDo.deleteKanbanBoard(boardId);
+  }
+
+  async createKanbanColumn(boardId: string, name: string, color: string | null, position: number) {
+    return await this.mainDo.createKanbanColumn(boardId, name, color, position);
+  }
+
+  async getKanbanColumns(boardId: string) {
+    return await this.mainDo.getKanbanColumns(boardId);
+  }
+
+  async updateKanbanColumn(columnId: string, updates: Partial<typeof kanbanColumn.$inferInsert>) {
+    return await this.mainDo.updateKanbanColumn(columnId, updates);
+  }
+
+  async deleteKanbanColumn(columnId: string) {
+    return await this.mainDo.deleteKanbanColumn(columnId);
+  }
+
+  async addEmailToKanbanColumn(columnId: string, threadId: string, connectionId: string, position: number) {
+    return await this.mainDo.addEmailToKanbanColumn(columnId, threadId, connectionId, position);
+  }
+
+  async removeEmailFromKanban(threadId: string, connectionId: string) {
+    return await this.mainDo.removeEmailFromKanban(threadId, connectionId);
+  }
+
+  async getKanbanEmailsByColumn(columnId: string) {
+    return await this.mainDo.getKanbanEmailsByColumn(columnId);
+  }
+
+  async getKanbanEmailMapping(threadId: string, connectionId: string) {
+    return await this.mainDo.getKanbanEmailMapping(threadId, connectionId);
+  }
+
+  async updateKanbanEmailPosition(threadId: string, connectionId: string, columnId: string, position: number) {
+    return await this.mainDo.updateKanbanEmailPosition(threadId, connectionId, columnId, position);
+  }
+
+  // Expose raw db for complex queries that don't have dedicated methods
+  get rawDb() {
+    return this.mainDo.db;
+  }
 }
 
 class ZeroDB extends DurableObject<ZeroEnv> {
-  db: DB = createDb(this.env.HYPERDRIVE.connectionString).db;
+  private _db: DB | null = null;
+
+  get db(): DB {
+    if (!this._db) {
+      this._db = createDb(this.env.HYPERDRIVE.connectionString).db;
+    }
+    return this._db;
+  }
 
   async setMetaData(userId: string) {
     return new DbRpcDO(this, userId);
@@ -248,6 +343,170 @@ class ZeroDB extends DurableObject<ZeroEnv> {
     return await this.db.query.connection.findMany({
       where: eq(connection.userId, userId),
     });
+  }
+
+  // Kanban Board Methods
+  async createKanbanBoard(
+    userId: string,
+    connectionId: string,
+    name: string,
+    isDefault: boolean = false,
+  ) {
+    const boardId = crypto.randomUUID();
+    return await this.db.insert(kanbanBoard).values({
+      id: boardId,
+      userId,
+      connectionId,
+      name,
+      isDefault,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
+  }
+
+  async getKanbanBoards(userId: string, connectionId?: string) {
+    if (connectionId) {
+      return await this.db.query.kanbanBoard.findMany({
+        where: and(
+          eq(kanbanBoard.userId, userId),
+          eq(kanbanBoard.connectionId, connectionId),
+        ),
+        orderBy: [desc(kanbanBoard.isDefault), asc(kanbanBoard.createdAt)],
+      });
+    }
+    return await this.db.query.kanbanBoard.findMany({
+      where: eq(kanbanBoard.userId, userId),
+      orderBy: [desc(kanbanBoard.isDefault), asc(kanbanBoard.createdAt)],
+    });
+  }
+
+  async getKanbanBoardById(boardId: string) {
+    return await this.db.query.kanbanBoard.findFirst({
+      where: eq(kanbanBoard.id, boardId),
+    });
+  }
+
+  async updateKanbanBoard(
+    boardId: string,
+    updates: Partial<typeof kanbanBoard.$inferInsert>,
+  ) {
+    return await this.db
+      .update(kanbanBoard)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(kanbanBoard.id, boardId))
+      .returning();
+  }
+
+  async deleteKanbanBoard(boardId: string) {
+    return await this.db.delete(kanbanBoard).where(eq(kanbanBoard.id, boardId));
+  }
+
+  async createKanbanColumn(
+    boardId: string,
+    name: string,
+    color: string | null,
+    position: number,
+  ) {
+    return await this.db.insert(kanbanColumn).values({
+      id: crypto.randomUUID(),
+      boardId,
+      name,
+      color,
+      position,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
+  }
+
+  async getKanbanColumns(boardId: string) {
+    return await this.db.query.kanbanColumn.findMany({
+      where: eq(kanbanColumn.boardId, boardId),
+      orderBy: [asc(kanbanColumn.position)],
+    });
+  }
+
+  async updateKanbanColumn(
+    columnId: string,
+    updates: Partial<typeof kanbanColumn.$inferInsert>,
+  ) {
+    return await this.db
+      .update(kanbanColumn)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(kanbanColumn.id, columnId))
+      .returning();
+  }
+
+  async deleteKanbanColumn(columnId: string) {
+    return await this.db.delete(kanbanColumn).where(eq(kanbanColumn.id, columnId));
+  }
+
+  async addEmailToKanbanColumn(
+    columnId: string,
+    threadId: string,
+    connectionId: string,
+    position: number,
+  ) {
+    // Remove from other columns first
+    await this.db.delete(kanbanEmailMapping).where(
+      and(
+        eq(kanbanEmailMapping.threadId, threadId),
+        eq(kanbanEmailMapping.connectionId, connectionId),
+      ),
+    );
+
+    // Add to new column
+    return await this.db.insert(kanbanEmailMapping).values({
+      id: crypto.randomUUID(),
+      columnId,
+      threadId,
+      connectionId,
+      position,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
+  }
+
+  async removeEmailFromKanban(threadId: string, connectionId: string) {
+    return await this.db.delete(kanbanEmailMapping).where(
+      and(
+        eq(kanbanEmailMapping.threadId, threadId),
+        eq(kanbanEmailMapping.connectionId, connectionId),
+      ),
+    );
+  }
+
+  async getKanbanEmailsByColumn(columnId: string) {
+    return await this.db.query.kanbanEmailMapping.findMany({
+      where: eq(kanbanEmailMapping.columnId, columnId),
+      orderBy: [asc(kanbanEmailMapping.position)],
+    });
+  }
+
+  async getKanbanEmailMapping(threadId: string, connectionId: string) {
+    return await this.db.query.kanbanEmailMapping.findFirst({
+      where: and(
+        eq(kanbanEmailMapping.threadId, threadId),
+        eq(kanbanEmailMapping.connectionId, connectionId),
+      ),
+    });
+  }
+
+  async updateKanbanEmailPosition(
+    threadId: string,
+    connectionId: string,
+    columnId: string,
+    position: number,
+  ) {
+    return await this.db
+      .update(kanbanEmailMapping)
+      .set({ columnId, position, updatedAt: new Date() })
+      .where(
+        and(
+          eq(kanbanEmailMapping.threadId, threadId),
+          eq(kanbanEmailMapping.connectionId, connectionId),
+        ),
+      )
+      .returning();
   }
 
   async findManyNotesByThreadId(
@@ -562,6 +821,48 @@ class ZeroDB extends DurableObject<ZeroEnv> {
       .where(and(eq(emailTemplate.id, templateId), eq(emailTemplate.userId, userId)))
       .returning();
   }
+
+  // Subscription management methods
+  async findSubscription(userId: string): Promise<typeof subscription.$inferSelect | undefined> {
+    return await this.db.query.subscription.findFirst({
+      where: eq(subscription.userId, userId),
+      orderBy: [desc(subscription.createdAt)],
+    });
+  }
+
+  async insertSubscription(data: typeof subscription.$inferInsert) {
+    return await this.db
+      .insert(subscription)
+      .values(data)
+      .returning();
+  }
+
+  async updateSubscription(userId: string, data: Partial<typeof subscription.$inferInsert>) {
+    return await this.db
+      .update(subscription)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(subscription.userId, userId))
+      .returning();
+  }
+
+  async deleteSubscription(userId: string) {
+    return Effect.tryPromise({
+      try: async () => {
+        return await this.db
+          .delete(subscription)
+          .where(eq(subscription.userId, userId));
+      },
+      catch: (error) => new Error(`Failed to delete subscription: ${error}`),
+    });
+  }
+
+  async updateSubscriptionByRazorpayId(razorpaySubscriptionId: string, data: Partial<typeof subscription.$inferInsert>) {
+    return await this.db
+      .update(subscription)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(subscription.razorpaySubscriptionId, razorpaySubscriptionId))
+      .returning();
+  }
 }
 
 // Utility function to hash IP addresses for PII protection
@@ -704,7 +1005,7 @@ const api = new Hono<HonoContext>()
     c.set('auth', undefined as any);
   })
   .route('/ai', aiRouter)
-  .route('/autumn', autumnApi)
+  .route('/razorpay', razorpayApi)
   .route('/public', publicRouter)
   .on(['GET', 'POST', 'OPTIONS'], '/auth/*', (c) => {
     return c.var.auth.handler(c.req.raw);
@@ -748,7 +1049,9 @@ const app = new Hono<HonoContext>()
         }
         const cookieDomain = env.COOKIE_DOMAIN;
         if (!cookieDomain) return null;
-        if (hostname === cookieDomain || hostname.endsWith('.' + cookieDomain)) {
+        // Strip leading dot from cookie domain for comparison
+        const domain = cookieDomain.startsWith('.') ? cookieDomain.substring(1) : cookieDomain;
+        if (hostname === domain || hostname.endsWith('.' + domain)) {
           return origin;
         }
         return null;
@@ -1258,4 +1561,5 @@ export {
   SyncThreadsWorkflow,
   SyncThreadsCoordinatorWorkflow,
   ShardRegistry,
+  MeetingRoom,
 };

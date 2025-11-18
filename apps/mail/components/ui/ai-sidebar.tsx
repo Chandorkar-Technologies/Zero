@@ -340,7 +340,7 @@ function AISidebar({ className }: AISidebarProps) {
   const { isPro, track, refetch: refetchBilling } = useBilling();
   const queryClient = useQueryClient();
   const trpc = useTRPC();
-  const [threadId] = useQueryState('threadId');
+  const [threadId, setThreadId] = useQueryState('threadId');
   const { folder } = useParams<{ folder: string }>();
   const { refetch: refetchLabels } = useLabels();
   const [searchValue] = useSearchValue();
@@ -434,6 +434,16 @@ function AISidebar({ className }: AISidebarProps) {
         messages: chatState.messages,
       });
       switch (toolCall.toolName) {
+        case Tools.GetThread:
+          // The tool returns a tag like <thread id="xyz"/> - extract the ID
+          const threadTag = (toolCall.args as { id: string }).id;
+          if (threadTag) {
+            await setThreadId(threadTag);
+            await queryClient.invalidateQueries({
+              queryKey: trpc.mail.get.queryKey({ id: threadTag }),
+            });
+          }
+          break;
         case Tools.CreateLabel:
         case Tools.DeleteLabel:
           await refetchLabels();
@@ -447,6 +457,7 @@ function AISidebar({ className }: AISidebarProps) {
         case Tools.MarkThreadsUnread:
         case Tools.ModifyLabels:
         case Tools.BulkDelete:
+        case Tools.BulkArchive:
           console.log('modifyLabels', toolCall.args);
           await refetchLabels();
           await Promise.all(
@@ -458,7 +469,7 @@ function AISidebar({ className }: AISidebarProps) {
           );
           break;
       }
-      await track({ featureId: 'chat-messages', value: 1 });
+      await track({ feature_id: 'chat-messages', count: 1 });
       await refetchBilling();
     },
   });

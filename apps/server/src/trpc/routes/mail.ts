@@ -15,7 +15,7 @@ import {
 } from '../../lib/driver/types';
 import { updateWritingStyleMatrix } from '../../services/writing-style-service';
 import type { DeleteAllSpamResponse, IEmailSendBatch } from '../../types';
-import { activeDriverProcedure, router, privateProcedure } from '../trpc';
+import { activeDriverProcedure, activeConnectionProcedure, router, privateProcedure } from '../trpc';
 import { processEmailHtml } from '../../lib/email-processor';
 import { defaultPageSize, FOLDERS } from '../../lib/utils';
 import { toAttachmentFiles } from '../../lib/attachments';
@@ -71,7 +71,7 @@ export const mailRouter = router({
       const result = await getThread(activeConnection.id, input.id);
       return result.result;
     }),
-  listThreads: activeDriverProcedure
+  listThreads: activeConnectionProcedure
     .input(
       z.object({
         folder: z.string().optional().default('inbox'),
@@ -86,9 +86,10 @@ export const mailRouter = router({
       const { folder, maxResults, cursor, q, labelIds } = input;
       const { activeConnection } = ctx;
       const executionCtx = getContext<HonoContext>().executionCtx;
-      const { stub: agent } = await getZeroAgent(activeConnection.id, executionCtx);
 
       console.debug('[listThreads] input:', { folder, maxResults, cursor, q, labelIds });
+
+      const { stub: agent } = await getZeroAgent(activeConnection.id, executionCtx);
 
       if (folder === FOLDERS.DRAFT) {
         console.debug('[listThreads] Listing drafts');

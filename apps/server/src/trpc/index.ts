@@ -18,18 +18,26 @@ import type { HonoContext } from '../ctx';
 import { aiRouter } from './routes/ai';
 import { router } from './trpc';
 import { loggingRouter } from './routes/logging';
+import { kanbanRouter } from './routes/kanban';
+import { peopleRouter } from './routes/teammates'; // Renamed from teammates to people
+import { notificationsRouter } from './routes/notifications';
+import { attachmentsRouter } from './routes/attachments';
 
 export const appRouter = router({
   ai: aiRouter,
+  attachments: attachmentsRouter,
   bimi: bimiRouter,
   brain: brainRouter,
   categories: categoriesRouter,
   connections: connectionsRouter,
   cookiePreferences: cookiePreferencesRouter,
   drafts: draftsRouter,
+  kanban: kanbanRouter,
   labels: labelsRouter,
   mail: mailRouter,
   notes: notesRouter,
+  notifications: notificationsRouter,
+  people: peopleRouter,
   shortcut: shortcutRouter,
   settings: settingsRouter,
   user: userRouter,

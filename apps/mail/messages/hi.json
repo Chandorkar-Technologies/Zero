@@ -613,7 +613,7 @@
     "createEmail": {
       "invalidEmail": "अमान्य ईमेल पता",
       "body": "बॉडी",
-      "example": "zero@0.email",
+      "example": "hello@nubo.email",
       "attachments": "अटैचमेंटस",
       "addMore": "और जोड़ें",
       "dropFilesToAttach": "अटैच करने के लिए फाइलें यहां छोड़ें",

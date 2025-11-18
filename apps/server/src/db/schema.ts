@@ -47,6 +47,49 @@ export const session = createTable(
   ],
 );
 
+export const subscription = createTable(
+  'subscription',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    razorpaySubscriptionId: text('razorpay_subscription_id').unique(),
+    planId: text('plan_id').notNull(), // 'free', 'pro_monthly', 'pro_annual'
+    status: text('status').notNull(), // 'created', 'active', 'cancelled', 'paused', 'completed'
+    currentPeriodStart: timestamp('current_period_start'),
+    currentPeriodEnd: timestamp('current_period_end'),
+    createdAt: timestamp('created_at').notNull(),
+    updatedAt: timestamp('updated_at').notNull(),
+  },
+  (t) => [
+    index('subscription_user_id_idx').on(t.userId),
+    index('subscription_status_idx').on(t.status),
+    index('subscription_razorpay_id_idx').on(t.razorpaySubscriptionId),
+  ],
+);
+
+export const usageTracking = createTable(
+  'usage_tracking',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    feature: text('feature').notNull(), // 'chatMessages', 'connections', 'brainActivity'
+    count: integer('count').notNull().default(0),
+    periodStart: timestamp('period_start').notNull(),
+    createdAt: timestamp('created_at').notNull(),
+    updatedAt: timestamp('updated_at').notNull(),
+  },
+  (t) => [
+    index('usage_tracking_user_id_idx').on(t.userId),
+    index('usage_tracking_feature_idx').on(t.feature),
+    index('usage_tracking_period_idx').on(t.periodStart),
+    index('usage_tracking_user_period_feature_idx').on(t.userId, t.periodStart, t.feature),
+  ],
+);
+
 export const account = createTable(
   'account',
   {
@@ -128,7 +171,7 @@ export const connection = createTable(
     accessToken: text('access_token'),
     refreshToken: text('refresh_token'),
     scope: text('scope').notNull(),
-    providerId: text('provider_id').$type<'google' | 'microsoft'>().notNull(),
+    providerId: text('provider_id').$type<'google' | 'microsoft' | 'imap'>().notNull(),
     expiresAt: timestamp('expires_at').notNull(),
     createdAt: timestamp('created_at').notNull(),
     updatedAt: timestamp('updated_at').notNull(),
@@ -138,6 +181,71 @@ export const connection = createTable(
     index('connection_user_id_idx').on(t.userId),
     index('connection_expires_at_idx').on(t.expiresAt),
     index('connection_provider_id_idx').on(t.providerId),
+  ],
+);
+
+// Kanban Board Schema
+export const kanbanBoard = createTable(
+  'kanban_board',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    connectionId: text('connection_id')
+      .notNull()
+      .references(() => connection.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    isDefault: boolean('is_default').notNull().default(false),
+    createdAt: timestamp('created_at').notNull(),
+    updatedAt: timestamp('updated_at').notNull(),
+  },
+  (t) => [
+    index('kanban_board_user_id_idx').on(t.userId),
+    index('kanban_board_connection_id_idx').on(t.connectionId),
+    index('kanban_board_default_idx').on(t.userId, t.isDefault),
+  ],
+);
+
+export const kanbanColumn = createTable(
+  'kanban_column',
+  {
+    id: text('id').primaryKey(),
+    boardId: text('board_id')
+      .notNull()
+      .references(() => kanbanBoard.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    color: text('color'),
+    position: integer('position').notNull(),
+    createdAt: timestamp('created_at').notNull(),
+    updatedAt: timestamp('updated_at').notNull(),
+  },
+  (t) => [
+    index('kanban_column_board_id_idx').on(t.boardId),
+    index('kanban_column_board_position_idx').on(t.boardId, t.position),
+  ],
+);
+
+export const kanbanEmailMapping = createTable(
+  'kanban_email_mapping',
+  {
+    id: text('id').primaryKey(),
+    columnId: text('column_id')
+      .notNull()
+      .references(() => kanbanColumn.id, { onDelete: 'cascade' }),
+    threadId: text('thread_id').notNull(),
+    connectionId: text('connection_id')
+      .notNull()
+      .references(() => connection.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    createdAt: timestamp('created_at').notNull(),
+    updatedAt: timestamp('updated_at').notNull(),
+  },
+  (t) => [
+    unique().on(t.threadId, t.connectionId),
+    index('kanban_email_column_id_idx').on(t.columnId),
+    index('kanban_email_thread_id_idx').on(t.threadId),
+    index('kanban_email_connection_id_idx').on(t.connectionId),
   ],
 );
 
@@ -298,6 +406,112 @@ export const oauthConsent = createTable(
     index('oauth_consent_user_id_idx').on(t.userId),
     index('oauth_consent_client_id_idx').on(t.clientId),
     index('oauth_consent_given_idx').on(t.consentGiven),
+  ],
+);
+
+// Meeting tables
+export const meeting = createTable(
+  'meeting',
+  {
+    id: text('id').primaryKey(),
+    title: text('title').notNull(),
+    description: text('description'),
+    hostId: text('host_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    roomId: text('room_id').notNull().unique(),
+    scheduledFor: timestamp('scheduled_for'),
+    startedAt: timestamp('started_at'),
+    endedAt: timestamp('ended_at'),
+    duration: integer('duration'), // in seconds
+    status: text('status').notNull().default('scheduled'), // scheduled, active, ended, cancelled
+    isRecording: boolean('is_recording').default(false),
+    recordingUrl: text('recording_url'),
+    maxParticipants: integer('max_participants').default(50),
+    requiresAuth: boolean('requires_auth').default(true),
+    allowChat: boolean('allow_chat').default(true),
+    allowScreenShare: boolean('allow_screen_share').default(true),
+    allowFileShare: boolean('allow_file_share').default(true),
+    createdAt: timestamp('created_at').notNull(),
+    updatedAt: timestamp('updated_at').notNull(),
+  },
+  (t) => [
+    index('meeting_host_id_idx').on(t.hostId),
+    index('meeting_room_id_idx').on(t.roomId),
+    index('meeting_status_idx').on(t.status),
+    index('meeting_scheduled_for_idx').on(t.scheduledFor),
+  ],
+);
+
+export const meetingParticipant = createTable(
+  'meeting_participant',
+  {
+    id: text('id').primaryKey(),
+    meetingId: text('meeting_id')
+      .notNull()
+      .references(() => meeting.id, { onDelete: 'cascade' }),
+    userId: text('user_id').references(() => user.id, { onDelete: 'cascade' }),
+    guestName: text('guest_name'),
+    guestEmail: text('guest_email'),
+    joinedAt: timestamp('joined_at'),
+    leftAt: timestamp('left_at'),
+    isMuted: boolean('is_muted').default(false),
+    isVideoOff: boolean('is_video_off').default(false),
+    isHandRaised: boolean('is_hand_raised').default(false),
+    role: text('role').default('participant'), // host, co-host, participant
+    createdAt: timestamp('created_at').notNull(),
+  },
+  (t) => [
+    index('meeting_participant_meeting_id_idx').on(t.meetingId),
+    index('meeting_participant_user_id_idx').on(t.userId),
+    index('meeting_participant_joined_at_idx').on(t.joinedAt),
+  ],
+);
+
+export const meetingRecording = createTable(
+  'meeting_recording',
+  {
+    id: text('id').primaryKey(),
+    meetingId: text('meeting_id')
+      .notNull()
+      .references(() => meeting.id, { onDelete: 'cascade' }),
+    r2Key: text('r2_key').notNull(),
+    fileName: text('file_name').notNull(),
+    fileSize: integer('file_size'), // in bytes
+    duration: integer('duration'), // in seconds
+    format: text('format').default('webm'),
+    status: text('status').notNull().default('processing'), // processing, ready, failed
+    startedAt: timestamp('started_at').notNull(),
+    endedAt: timestamp('ended_at'),
+    createdAt: timestamp('created_at').notNull(),
+  },
+  (t) => [
+    index('meeting_recording_meeting_id_idx').on(t.meetingId),
+    index('meeting_recording_status_idx').on(t.status),
+  ],
+);
+
+export const meetingMessage = createTable(
+  'meeting_message',
+  {
+    id: text('id').primaryKey(),
+    meetingId: text('meeting_id')
+      .notNull()
+      .references(() => meeting.id, { onDelete: 'cascade' }),
+    participantId: text('participant_id')
+      .notNull()
+      .references(() => meetingParticipant.id, { onDelete: 'cascade' }),
+    content: text('content').notNull(),
+    messageType: text('message_type').default('text'), // text, file, emoji, system
+    fileUrl: text('file_url'),
+    fileName: text('file_name'),
+    fileSize: integer('file_size'),
+    createdAt: timestamp('created_at').notNull(),
+  },
+  (t) => [
+    index('meeting_message_meeting_id_idx').on(t.meetingId),
+    index('meeting_message_participant_id_idx').on(t.participantId),
+    index('meeting_message_created_at_idx').on(t.createdAt),
   ],
 );
 
