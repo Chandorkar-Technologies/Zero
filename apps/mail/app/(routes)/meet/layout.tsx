@@ -6,7 +6,7 @@ export default function MeetLayout() {
   return (
     <HotkeyProviderWrapper>
       <AppSidebar />
-      <div className="w-full">
+      <div className="flex-1 bg-sidebar dark:bg-sidebar">
         <Outlet />
       </div>
     </HotkeyProviderWrapper>

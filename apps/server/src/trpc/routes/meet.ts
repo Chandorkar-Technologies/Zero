@@ -176,10 +176,10 @@ export const meetRouter = router({
         id: participantId,
         meetingId: meetingRecord.id,
         userId: sessionUser.id,
-        name: input.name || sessionUser.name || sessionUser.email,
-        email: sessionUser.email,
-        isGuest: false,
+        guestName: input.name || sessionUser.name || sessionUser.email,
+        guestEmail: sessionUser.email,
         joinedAt: new Date(),
+        createdAt: new Date(),
       });
 
       // Build WebSocket URL with proper auth params
@@ -233,10 +233,10 @@ export const meetRouter = router({
         id: participantId,
         meetingId: meetingRecord.id,
         userId: null,
-        name: input.name,
-        email: input.email,
-        isGuest: true,
+        guestName: input.name,
+        guestEmail: input.email,
         joinedAt: new Date(),
+        createdAt: new Date(),
       });
 
       const baseUrl = env.VITE_PUBLIC_BACKEND_URL.replace('https://', 'wss://').replace(
@@ -405,9 +405,12 @@ export const meetRouter = router({
         id: recordingId,
         meetingId: input.meetingId,
         r2Key: input.r2Key,
-        url: recordingUrl,
+        fileName: `recording-${recordingId}.webm`,
         duration: input.duration,
         fileSize: input.fileSize,
+        status: 'ready',
+        startedAt: new Date(),
+        endedAt: new Date(),
         createdAt: new Date(),
       });
 
@@ -440,7 +443,7 @@ export const meetRouter = router({
       }
 
       return {
-        url: recording.url,
+        url: `https://recordings.nubo.email/${recording.r2Key}`,
         duration: recording.duration,
         fileSize: recording.fileSize,
       };
@@ -518,7 +521,7 @@ export const meetRouter = router({
 
       // Calculate stats
       const totalParticipants = participants.length;
-      const guestCount = participants.filter((p) => p.isGuest).length;
+      const guestCount = participants.filter((p) => !p.userId).length;
       const authenticatedCount = totalParticipants - guestCount;
       const totalMessages = messages.length;
       const totalRecordings = recordings.length;

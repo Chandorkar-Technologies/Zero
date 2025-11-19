@@ -23,12 +23,16 @@ import {
   HardDriveDownload,
   Loader2,
   CopyIcon,
+  KanbanSquare,
 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from '../ui/dropdown-menu';
 import { cn, formatDate, formatTime, shouldShowSeparateTime } from '@/lib/utils';
 import { Dialog, DialogTitle, DialogHeader, DialogContent } from '../ui/dialog';
@@ -41,7 +45,7 @@ import { useActiveConnection } from '@/hooks/use-connections';
 import { useAttachments } from '@/hooks/use-attachments';
 import { useTRPC } from '@/providers/query-provider';
 import { useThreadLabels } from '@/hooks/use-labels';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Markdown } from '@react-email/components';
 import { useSummary } from '@/hooks/use-summary';
 import { TextShimmer } from '../ui/text-shimmer';
@@ -679,7 +683,9 @@ const MailDisplay = ({ emailData, index, totalEmails, demo, threadAttachments }:
   const { data: activeConnection } = useActiveConnection();
   const [researchSender, setResearchSender] = useState<Sender | null>(null);
   const [searchQuery, setSearchQuery] = useState<string | null>(null);
-  //   const trpc = useTRPC();
+  const trpc = useTRPC();
+
+  const { data: kanbanBoards } = useQuery(trpc.kanban.getBoards.queryOptions({}));
 
   const isLastEmail = useMemo(
     () => emailData.id === threadData?.latest?.id,
@@ -1531,6 +1537,40 @@ const MailDisplay = ({ emailData, index, totalEmails, demo, threadAttachments }:
                                   <HardDriveDownload className="fill-iconLight dark:text-iconDark dark:fill-iconLight mr-2 h-4 w-4" />
                                   Download All Attachments
                                 </DropdownMenuItem>
+                              )}
+                              {kanbanBoards && kanbanBoards.length > 0 && emailData.threadId && emailData.connectionId && (
+                                <DropdownMenuSub>
+                                  <DropdownMenuSubTrigger>
+                                    <KanbanSquare className="mr-2 h-4 w-4" />
+                                    <span>Add to Kanban</span>
+                                  </DropdownMenuSubTrigger>
+                                  <DropdownMenuSubContent className="max-h-[300px] overflow-y-auto">
+                                    {kanbanBoards.map((board) => (
+                                      <DropdownMenuSub key={board.id}>
+                                        <DropdownMenuSubTrigger>
+                                          {board.name}
+                                        </DropdownMenuSubTrigger>
+                                        <DropdownMenuSubContent>
+                                          {(() => {
+                                            // Simple inline columns list
+                                            return (
+                                              <DropdownMenuItem
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  e.preventDefault();
+                                                  // TODO: Add logic to fetch columns and add to kanban
+                                                  toast.info('Please use the thread view to add to Kanban');
+                                                }}
+                                              >
+                                                Add to board
+                                              </DropdownMenuItem>
+                                            );
+                                          })()}
+                                        </DropdownMenuSubContent>
+                                      </DropdownMenuSub>
+                                    ))}
+                                  </DropdownMenuSubContent>
+                                </DropdownMenuSub>
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>

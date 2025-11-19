@@ -42,7 +42,7 @@ export const peopleRouter = router({
       const { stub: agent } = await getZeroAgent(connectionId, executionCtx);
 
       // Query threads from database
-      const threads = await agent.db.query.thread.findMany({
+      const threads = await agent.db.query.threads.findMany({
         where: (thread: any, { eq }: any) => eq(thread.providerId, connectionId),
         orderBy: (thread: any, { desc }: any) => desc(thread.latestReceivedOn),
         limit: 1000,
