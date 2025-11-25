@@ -40,12 +40,14 @@ driveApiRouter.post('/upload', async (c) => {
 
   try {
     const formData = await c.req.formData();
-    const file = formData.get('file') as File;
+    const fileEntry = formData.get('file');
     const folderId = formData.get('folderId') as string | null;
 
-    if (!file) {
+    if (!fileEntry || typeof fileEntry === 'string') {
       return c.json({ error: 'No file provided' }, 400);
     }
+
+    const file = fileEntry as unknown as { name: string; type: string; size: number; arrayBuffer(): Promise<ArrayBuffer> };
 
     const { db, conn } = createDb(env.HYPERDRIVE.connectionString);
 

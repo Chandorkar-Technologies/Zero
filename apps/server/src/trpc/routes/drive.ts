@@ -1,6 +1,8 @@
 import { privateProcedure, router } from '../trpc';
 import { driveFile, driveFolder, driveImportJob } from '../../db/schema';
 import { eq, and, isNull, desc, asc } from 'drizzle-orm';
+import type { NeonHttpDatabase } from 'drizzle-orm/neon-http';
+import type * as schema from '../../db/schema';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { env } from '../../env';
@@ -667,4 +669,554 @@ export const driveRouter = router({
 
       return jobs;
     }),
+
+  // Get Google Drive OAuth URL
+  getGoogleDriveAuthUrl: privateProcedure
+    .input(z.object({ redirectUri: z.string() }))
+    .mutation(({ input }) => {
+      const scopes = [
+        'https://www.googleapis.com/auth/drive.readonly',
+        'https://www.googleapis.com/auth/drive.file',
+      ];
+
+      const params = new URLSearchParams({
+        client_id: env.GOOGLE_CLIENT_ID,
+        redirect_uri: input.redirectUri,
+        response_type: 'code',
+        scope: scopes.join(' '),
+        access_type: 'offline',
+        prompt: 'consent',
+        state: 'google_drive_import',
+      });
+
+      return {
+        url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
+      };
+    }),
+
+  // Exchange Google OAuth code for tokens
+  exchangeGoogleDriveCode: privateProcedure
+    .input(z.object({
+      code: z.string(),
+      redirectUri: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const response = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: env.GOOGLE_CLIENT_ID,
+          client_secret: env.GOOGLE_CLIENT_SECRET,
+          code: input.code,
+          grant_type: 'authorization_code',
+          redirect_uri: input.redirectUri,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('Google OAuth error:', error);
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Failed to exchange code' });
+      }
+
+      const tokens = await response.json() as { access_token: string; refresh_token?: string; expires_in: number };
+      return {
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        expiresIn: tokens.expires_in,
+      };
+    }),
+
+  // List files from Google Drive
+  listGoogleDriveFiles: privateProcedure
+    .input(z.object({
+      accessToken: z.string(),
+      folderId: z.string().optional(),
+      pageToken: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const query = input.folderId
+        ? `'${input.folderId}' in parents and trashed = false`
+        : "'root' in parents and trashed = false";
+
+      const params = new URLSearchParams({
+        q: query,
+        fields: 'nextPageToken, files(id, name, mimeType, size, modifiedTime, iconLink, thumbnailLink)',
+        pageSize: '100',
+        orderBy: 'folder,name',
+      });
+
+      if (input.pageToken) {
+        params.append('pageToken', input.pageToken);
+      }
+
+      const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+        headers: { Authorization: `Bearer ${input.accessToken}` },
+      });
+
+      if (!response.ok) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Failed to list files' });
+      }
+
+      const data = await response.json() as {
+        files: Array<{
+          id: string;
+          name: string;
+          mimeType: string;
+          size?: string;
+          modifiedTime: string;
+          iconLink?: string;
+          thumbnailLink?: string;
+        }>;
+        nextPageToken?: string;
+      };
+
+      return {
+        files: data.files.map((file) => ({
+          id: file.id,
+          name: file.name,
+          mimeType: file.mimeType,
+          size: file.size ? parseInt(file.size) : 0,
+          modifiedTime: file.modifiedTime,
+          isFolder: file.mimeType === 'application/vnd.google-apps.folder',
+          iconLink: file.iconLink,
+          thumbnailLink: file.thumbnailLink,
+        })),
+        nextPageToken: data.nextPageToken,
+      };
+    }),
+
+  // Import files from Google Drive
+  importFromGoogleDrive: privateProcedure
+    .input(z.object({
+      accessToken: z.string(),
+      fileIds: z.array(z.string()),
+      targetFolderId: z.string().nullable().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const { sessionUser } = ctx;
+
+      // Create import job
+      const jobId = crypto.randomUUID();
+      await ctx.db.insert(driveImportJob).values({
+        id: jobId,
+        userId: sessionUser.id,
+        source: 'google_drive',
+        status: 'processing',
+        totalFiles: input.fileIds.length,
+        processedFiles: 0,
+        failedFiles: 0,
+        sourceFileIds: input.fileIds,
+        targetFolderId: input.targetFolderId || null,
+        startedAt: new Date(),
+        createdAt: new Date(),
+      });
+
+      // Process files in background (simplified - in production would use a queue)
+      processGoogleDriveImport(
+        input.accessToken,
+        input.fileIds,
+        sessionUser.id,
+        jobId,
+        input.targetFolderId || null,
+        ctx.db,
+      ).catch(console.error);
+
+      return { jobId };
+    }),
+
+  // Get OneDrive OAuth URL
+  getOneDriveAuthUrl: privateProcedure
+    .input(z.object({ redirectUri: z.string() }))
+    .mutation(({ input }) => {
+      const scopes = [
+        'Files.Read',
+        'Files.Read.All',
+        'offline_access',
+      ];
+
+      const params = new URLSearchParams({
+        client_id: env.MICROSOFT_CLIENT_ID,
+        redirect_uri: input.redirectUri,
+        response_type: 'code',
+        scope: scopes.join(' '),
+        prompt: 'consent',
+        state: 'onedrive_import',
+      });
+
+      return {
+        url: `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params.toString()}`,
+      };
+    }),
+
+  // Exchange OneDrive OAuth code for tokens
+  exchangeOneDriveCode: privateProcedure
+    .input(z.object({
+      code: z.string(),
+      redirectUri: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: env.MICROSOFT_CLIENT_ID,
+          client_secret: env.MICROSOFT_CLIENT_SECRET,
+          code: input.code,
+          grant_type: 'authorization_code',
+          redirect_uri: input.redirectUri,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('OneDrive OAuth error:', error);
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Failed to exchange code' });
+      }
+
+      const tokens = await response.json() as { access_token: string; refresh_token?: string; expires_in: number };
+      return {
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        expiresIn: tokens.expires_in,
+      };
+    }),
+
+  // List files from OneDrive
+  listOneDriveFiles: privateProcedure
+    .input(z.object({
+      accessToken: z.string(),
+      folderId: z.string().optional(),
+      skipToken: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const endpoint = input.folderId
+        ? `https://graph.microsoft.com/v1.0/me/drive/items/${input.folderId}/children`
+        : 'https://graph.microsoft.com/v1.0/me/drive/root/children';
+
+      const url = new URL(endpoint);
+      url.searchParams.set('$select', 'id,name,size,lastModifiedDateTime,file,folder');
+      url.searchParams.set('$top', '100');
+      url.searchParams.set('$orderby', 'name');
+
+      if (input.skipToken) {
+        url.searchParams.set('$skiptoken', input.skipToken);
+      }
+
+      const response = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${input.accessToken}` },
+      });
+
+      if (!response.ok) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Failed to list files' });
+      }
+
+      const data = await response.json() as {
+        value: Array<{
+          id: string;
+          name: string;
+          size?: number;
+          lastModifiedDateTime: string;
+          file?: { mimeType: string };
+          folder?: object;
+        }>;
+        '@odata.nextLink'?: string;
+      };
+
+      // Extract skipToken from nextLink
+      let nextSkipToken: string | undefined;
+      if (data['@odata.nextLink']) {
+        const nextUrl = new URL(data['@odata.nextLink']);
+        nextSkipToken = nextUrl.searchParams.get('$skiptoken') || undefined;
+      }
+
+      return {
+        files: data.value.map((item) => ({
+          id: item.id,
+          name: item.name,
+          mimeType: item.file?.mimeType || 'application/octet-stream',
+          size: item.size || 0,
+          modifiedTime: item.lastModifiedDateTime,
+          isFolder: !!item.folder,
+        })),
+        nextSkipToken,
+      };
+    }),
+
+  // Import files from OneDrive
+  importFromOneDrive: privateProcedure
+    .input(z.object({
+      accessToken: z.string(),
+      fileIds: z.array(z.string()),
+      targetFolderId: z.string().nullable().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const { sessionUser } = ctx;
+
+      // Create import job
+      const jobId = crypto.randomUUID();
+      await ctx.db.insert(driveImportJob).values({
+        id: jobId,
+        userId: sessionUser.id,
+        source: 'onedrive',
+        status: 'processing',
+        totalFiles: input.fileIds.length,
+        processedFiles: 0,
+        failedFiles: 0,
+        sourceFileIds: input.fileIds,
+        targetFolderId: input.targetFolderId || null,
+        startedAt: new Date(),
+        createdAt: new Date(),
+      });
+
+      // Process files in background
+      processOneDriveImport(
+        input.accessToken,
+        input.fileIds,
+        sessionUser.id,
+        jobId,
+        input.targetFolderId || null,
+        ctx.db,
+      ).catch(console.error);
+
+      return { jobId };
+    }),
 });
+
+// Background import processor for Google Drive
+async function processGoogleDriveImport(
+  accessToken: string,
+  fileIds: string[],
+  userId: string,
+  jobId: string,
+  targetFolderId: string | null,
+  db: NeonHttpDatabase<typeof schema>,
+) {
+  let processed = 0;
+  let failed = 0;
+  const bucket = env.THREADS_BUCKET;
+
+  for (const sourceFileId of fileIds) {
+    try {
+      // Get file metadata
+      const metaResponse = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${sourceFileId}?fields=name,mimeType,size`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+
+      if (!metaResponse.ok) {
+        failed++;
+        continue;
+      }
+
+      const meta = await metaResponse.json() as { name: string; mimeType: string; size?: string };
+
+      // Skip Google Docs/Sheets/Slides - they need export
+      const googleDocTypes = [
+        'application/vnd.google-apps.document',
+        'application/vnd.google-apps.spreadsheet',
+        'application/vnd.google-apps.presentation',
+        'application/vnd.google-apps.folder',
+      ];
+
+      if (googleDocTypes.includes(meta.mimeType)) {
+        // For Google Docs, export as Office format
+        let exportMimeType: string;
+        let extension: string;
+
+        if (meta.mimeType === 'application/vnd.google-apps.document') {
+          exportMimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          extension = '.docx';
+        } else if (meta.mimeType === 'application/vnd.google-apps.spreadsheet') {
+          exportMimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+          extension = '.xlsx';
+        } else if (meta.mimeType === 'application/vnd.google-apps.presentation') {
+          exportMimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+          extension = '.pptx';
+        } else {
+          // Skip folders
+          continue;
+        }
+
+        const exportResponse = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${sourceFileId}/export?mimeType=${encodeURIComponent(exportMimeType)}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } },
+        );
+
+        if (!exportResponse.ok) {
+          failed++;
+          continue;
+        }
+
+        const content = await exportResponse.arrayBuffer();
+        const fileId = crypto.randomUUID();
+        const fileName = meta.name.endsWith(extension) ? meta.name : `${meta.name}${extension}`;
+        const r2Key = `drive/${userId}/${fileId}/${fileName}`;
+
+        await bucket.put(r2Key, content, {
+          httpMetadata: { contentType: exportMimeType },
+        });
+
+        await db.insert(driveFile).values({
+          id: fileId,
+          userId,
+          folderId: targetFolderId,
+          name: fileName,
+          mimeType: exportMimeType,
+          size: content.byteLength,
+          r2Key,
+          importSource: 'google_drive',
+          sourceFileId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      } else {
+        // Download regular file
+        const downloadResponse = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${sourceFileId}?alt=media`,
+          { headers: { Authorization: `Bearer ${accessToken}` } },
+        );
+
+        if (!downloadResponse.ok) {
+          failed++;
+          continue;
+        }
+
+        const content = await downloadResponse.arrayBuffer();
+        const fileId = crypto.randomUUID();
+        const r2Key = `drive/${userId}/${fileId}/${meta.name}`;
+
+        await bucket.put(r2Key, content, {
+          httpMetadata: { contentType: meta.mimeType },
+        });
+
+        await db.insert(driveFile).values({
+          id: fileId,
+          userId,
+          folderId: targetFolderId,
+          name: meta.name,
+          mimeType: meta.mimeType,
+          size: meta.size ? parseInt(meta.size) : content.byteLength,
+          r2Key,
+          importSource: 'google_drive',
+          sourceFileId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
+
+      processed++;
+    } catch (e) {
+      console.error(`Failed to import file ${sourceFileId}:`, e);
+      failed++;
+    }
+
+    // Update job progress
+    await db
+      .update(driveImportJob)
+      .set({ processedFiles: processed, failedFiles: failed })
+      .where(eq(driveImportJob.id, jobId));
+  }
+
+  // Mark job as complete
+  await db
+    .update(driveImportJob)
+    .set({
+      status: failed === fileIds.length ? 'failed' : 'completed',
+      processedFiles: processed,
+      failedFiles: failed,
+      completedAt: new Date(),
+    })
+    .where(eq(driveImportJob.id, jobId));
+}
+
+// Background import processor for OneDrive
+async function processOneDriveImport(
+  accessToken: string,
+  fileIds: string[],
+  userId: string,
+  jobId: string,
+  targetFolderId: string | null,
+  db: NeonHttpDatabase<typeof schema>,
+) {
+  let processed = 0;
+  let failed = 0;
+  const bucket = env.THREADS_BUCKET;
+
+  for (const sourceFileId of fileIds) {
+    try {
+      // Get file metadata
+      const metaResponse = await fetch(
+        `https://graph.microsoft.com/v1.0/me/drive/items/${sourceFileId}?$select=name,size,file`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+
+      if (!metaResponse.ok) {
+        failed++;
+        continue;
+      }
+
+      const meta = await metaResponse.json() as {
+        name: string;
+        size: number;
+        file?: { mimeType: string };
+      };
+
+      // Download file content
+      const downloadResponse = await fetch(
+        `https://graph.microsoft.com/v1.0/me/drive/items/${sourceFileId}/content`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+
+      if (!downloadResponse.ok) {
+        failed++;
+        continue;
+      }
+
+      const content = await downloadResponse.arrayBuffer();
+      const fileId = crypto.randomUUID();
+      const mimeType = meta.file?.mimeType || 'application/octet-stream';
+      const r2Key = `drive/${userId}/${fileId}/${meta.name}`;
+
+      await bucket.put(r2Key, content, {
+        httpMetadata: { contentType: mimeType },
+      });
+
+      await db.insert(driveFile).values({
+        id: fileId,
+        userId,
+        folderId: targetFolderId,
+        name: meta.name,
+        mimeType,
+        size: meta.size || content.byteLength,
+        r2Key,
+        importSource: 'onedrive',
+        sourceFileId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      processed++;
+    } catch (e) {
+      console.error(`Failed to import file ${sourceFileId}:`, e);
+      failed++;
+    }
+
+    // Update job progress
+    await db
+      .update(driveImportJob)
+      .set({ processedFiles: processed, failedFiles: failed })
+      .where(eq(driveImportJob.id, jobId));
+  }
+
+  // Mark job as complete
+  await db
+    .update(driveImportJob)
+    .set({
+      status: failed === fileIds.length ? 'failed' : 'completed',
+      processedFiles: processed,
+      failedFiles: failed,
+      completedAt: new Date(),
+    })
+    .where(eq(driveImportJob.id, jobId));
+}

@@ -42,6 +42,11 @@ import {
   Pencil,
   FolderInput,
   ExternalLink,
+  Import,
+  Check,
+  Loader2,
+  ArrowLeft,
+  CloudDownload,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -97,8 +102,27 @@ export default function DrivePage() {
   const [isRenameOpen, setIsRenameOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<{ id: string; name: string; type: 'file' | 'folder' } | null>(null);
   // Move functionality - to be implemented
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_isMoveOpen, _setIsMoveOpen] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_moveTarget, _setMoveTarget] = useState<{ id: string; name: string } | null>(null);
+
+  // Import state
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importSource, setImportSource] = useState<'google_drive' | 'onedrive' | null>(null);
+  const [importAccessToken, setImportAccessToken] = useState<string | null>(null);
+  const [importFiles, setImportFiles] = useState<Array<{
+    id: string;
+    name: string;
+    mimeType: string;
+    size: number;
+    isFolder: boolean;
+    modifiedTime: string;
+  }>>([]);
+  const [selectedImportFiles, setSelectedImportFiles] = useState<Set<string>>(new Set());
+  const [importFolderStack, setImportFolderStack] = useState<Array<{ id: string; name: string }>>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
 
   // Current folder from URL
   const currentFolderId = searchParams.get('folder') || null;
@@ -129,10 +153,21 @@ export default function DrivePage() {
   const trashFileMutation = useMutation(trpc.drive.trashFile.mutationOptions());
   const restoreFileMutation = useMutation(trpc.drive.restoreFile.mutationOptions());
   const deleteFileMutation = useMutation(trpc.drive.deleteFile.mutationOptions());
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _moveFileMutation = useMutation(trpc.drive.moveFile.mutationOptions());
   const getDownloadUrlMutation = useMutation(trpc.drive.getDownloadUrl.mutationOptions());
   const getEditorConfigMutation = useMutation(trpc.drive.getEditorConfig.mutationOptions());
   const emptyTrashMutation = useMutation(trpc.drive.emptyTrash.mutationOptions());
+
+  // Import mutations
+  const getGoogleAuthUrlMutation = useMutation(trpc.drive.getGoogleDriveAuthUrl.mutationOptions());
+  const exchangeGoogleCodeMutation = useMutation(trpc.drive.exchangeGoogleDriveCode.mutationOptions());
+  const listGoogleFilesMutation = useMutation(trpc.drive.listGoogleDriveFiles.mutationOptions());
+  const importFromGoogleMutation = useMutation(trpc.drive.importFromGoogleDrive.mutationOptions());
+  const getOneDriveAuthUrlMutation = useMutation(trpc.drive.getOneDriveAuthUrl.mutationOptions());
+  const exchangeOneDriveCodeMutation = useMutation(trpc.drive.exchangeOneDriveCode.mutationOptions());
+  const listOneDriveFilesMutation = useMutation(trpc.drive.listOneDriveFiles.mutationOptions());
+  const importFromOneDriveMutation = useMutation(trpc.drive.importFromOneDrive.mutationOptions());
 
   // Invalidate queries helper
   const invalidate = () => {
@@ -231,6 +266,7 @@ export default function DrivePage() {
     }
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleDownload = async (fileId: string, _fileName: string) => {
     try {
       const result = await getDownloadUrlMutation.mutateAsync({ fileId });
@@ -296,7 +332,196 @@ export default function DrivePage() {
     }
 
     invalidate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentFolderId]);
+
+  // Import handlers
+  const handleStartImport = async (source: 'google_drive' | 'onedrive') => {
+    setImportSource(source);
+    setIsImportOpen(true);
+
+    const redirectUri = `${window.location.origin}/drive`;
+
+    try {
+      if (source === 'google_drive') {
+        const { url } = await getGoogleAuthUrlMutation.mutateAsync({ redirectUri });
+        // Open OAuth popup
+        const popup = window.open(url, 'Import from Google Drive', 'width=600,height=700');
+        if (popup) {
+          // Listen for OAuth callback
+          const checkPopup = setInterval(() => {
+            try {
+              if (popup.closed) {
+                clearInterval(checkPopup);
+                return;
+              }
+              if (popup.location.href.includes(window.location.origin)) {
+                const popupUrl = new URL(popup.location.href);
+                const code = popupUrl.searchParams.get('code');
+                popup.close();
+                clearInterval(checkPopup);
+                if (code) {
+                  handleOAuthCallback(source, code, redirectUri);
+                }
+              }
+            } catch {
+              // Cross-origin - popup still on OAuth page
+            }
+          }, 500);
+        }
+      } else {
+        const { url } = await getOneDriveAuthUrlMutation.mutateAsync({ redirectUri });
+        const popup = window.open(url, 'Import from OneDrive', 'width=600,height=700');
+        if (popup) {
+          const checkPopup = setInterval(() => {
+            try {
+              if (popup.closed) {
+                clearInterval(checkPopup);
+                return;
+              }
+              if (popup.location.href.includes(window.location.origin)) {
+                const popupUrl = new URL(popup.location.href);
+                const code = popupUrl.searchParams.get('code');
+                popup.close();
+                clearInterval(checkPopup);
+                if (code) {
+                  handleOAuthCallback(source, code, redirectUri);
+                }
+              }
+            } catch {
+              // Cross-origin - popup still on OAuth page
+            }
+          }, 500);
+        }
+      }
+    } catch {
+      toast.error('Failed to start import');
+      setIsImportOpen(false);
+    }
+  };
+
+  const handleOAuthCallback = async (source: 'google_drive' | 'onedrive', code: string, redirectUri: string) => {
+    setImportLoading(true);
+    try {
+      let accessToken: string;
+      if (source === 'google_drive') {
+        const result = await exchangeGoogleCodeMutation.mutateAsync({ code, redirectUri });
+        accessToken = result.accessToken;
+      } else {
+        const result = await exchangeOneDriveCodeMutation.mutateAsync({ code, redirectUri });
+        accessToken = result.accessToken;
+      }
+      setImportAccessToken(accessToken);
+      await loadImportFiles(source, accessToken);
+    } catch {
+      toast.error('Failed to authenticate');
+      setIsImportOpen(false);
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const loadImportFiles = async (source: 'google_drive' | 'onedrive', accessToken: string, folderId?: string) => {
+    setImportLoading(true);
+    try {
+      if (source === 'google_drive') {
+        const result = await listGoogleFilesMutation.mutateAsync({ accessToken, folderId });
+        setImportFiles(result.files);
+      } else {
+        const result = await listOneDriveFilesMutation.mutateAsync({ accessToken, folderId });
+        setImportFiles(result.files);
+      }
+    } catch {
+      toast.error('Failed to load files');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleImportFolderNavigate = async (folder: { id: string; name: string }) => {
+    if (!importAccessToken || !importSource) return;
+    setImportFolderStack((prev) => [...prev, folder]);
+    setSelectedImportFiles(new Set());
+    await loadImportFiles(importSource, importAccessToken, folder.id);
+  };
+
+  const handleImportFolderBack = async () => {
+    if (!importAccessToken || !importSource) return;
+    const newStack = [...importFolderStack];
+    newStack.pop();
+    setImportFolderStack(newStack);
+    setSelectedImportFiles(new Set());
+    const parentId = newStack.length > 0 ? newStack[newStack.length - 1].id : undefined;
+    await loadImportFiles(importSource, importAccessToken, parentId);
+  };
+
+  const handleToggleImportFile = (fileId: string) => {
+    setSelectedImportFiles((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(fileId)) {
+        newSet.delete(fileId);
+      } else {
+        newSet.add(fileId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAllImport = () => {
+    const fileIds = importFiles.filter((f) => !f.isFolder).map((f) => f.id);
+    if (selectedImportFiles.size === fileIds.length) {
+      setSelectedImportFiles(new Set());
+    } else {
+      setSelectedImportFiles(new Set(fileIds));
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!importAccessToken || !importSource || selectedImportFiles.size === 0) return;
+
+    setIsImporting(true);
+    try {
+      if (importSource === 'google_drive') {
+        const { jobId } = await importFromGoogleMutation.mutateAsync({
+          accessToken: importAccessToken,
+          fileIds: Array.from(selectedImportFiles),
+          targetFolderId: currentFolderId,
+        });
+        toast.success(`Import started! Job ID: ${jobId.slice(0, 8)}...`);
+      } else {
+        const { jobId } = await importFromOneDriveMutation.mutateAsync({
+          accessToken: importAccessToken,
+          fileIds: Array.from(selectedImportFiles),
+          targetFolderId: currentFolderId,
+        });
+        toast.success(`Import started! Job ID: ${jobId.slice(0, 8)}...`);
+      }
+
+      // Reset import state
+      setIsImportOpen(false);
+      setImportSource(null);
+      setImportAccessToken(null);
+      setImportFiles([]);
+      setSelectedImportFiles(new Set());
+      setImportFolderStack([]);
+
+      // Refresh file list after a short delay
+      setTimeout(() => invalidate(), 2000);
+    } catch {
+      toast.error('Failed to start import');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleCloseImport = () => {
+    setIsImportOpen(false);
+    setImportSource(null);
+    setImportAccessToken(null);
+    setImportFiles([]);
+    setSelectedImportFiles(new Set());
+    setImportFolderStack([]);
+  };
 
   // Filter contents by search
   const filteredFolders = contents?.folders.filter(
@@ -320,6 +545,24 @@ export default function DrivePage() {
             <h1 className="text-2xl font-bold">Nubo Drive</h1>
           </div>
           <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <Import className="mr-2 h-4 w-4" />
+                  Import
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => handleStartImport('google_drive')}>
+                  <CloudDownload className="mr-2 h-4 w-4" />
+                  From Google Drive
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleStartImport('onedrive')}>
+                  <CloudDownload className="mr-2 h-4 w-4" />
+                  From OneDrive
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button variant="outline" onClick={() => setIsCreateFolderOpen(true)}>
               <FolderPlus className="mr-2 h-4 w-4" />
               New Folder
@@ -762,6 +1005,211 @@ export default function DrivePage() {
             </Button>
             <Button onClick={handleRename} disabled={!renameTarget?.name.trim()}>
               Rename
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Dialog */}
+      <Dialog open={isImportOpen} onOpenChange={(open) => !open && handleCloseImport()}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>
+              Import from {importSource === 'google_drive' ? 'Google Drive' : 'OneDrive'}
+            </DialogTitle>
+            <DialogDescription>
+              Select files to import to your Nubo Drive.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Import content */}
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            {importLoading && !importAccessToken ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-muted-foreground">Connecting...</span>
+              </div>
+            ) : importAccessToken ? (
+              <>
+                {/* Breadcrumb navigation */}
+                <div className="flex items-center gap-1 text-sm mb-4 px-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setImportFolderStack([]);
+                      setSelectedImportFiles(new Set());
+                      if (importAccessToken && importSource) {
+                        loadImportFiles(importSource, importAccessToken);
+                      }
+                    }}
+                    className={cn(importFolderStack.length === 0 && 'font-semibold')}
+                  >
+                    <Home className="mr-1 h-4 w-4" />
+                    Root
+                  </Button>
+                  {importFolderStack.map((folder, index) => (
+                    <div key={folder.id} className="flex items-center">
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={async () => {
+                          const newStack = importFolderStack.slice(0, index + 1);
+                          setImportFolderStack(newStack);
+                          setSelectedImportFiles(new Set());
+                          if (importAccessToken && importSource) {
+                            await loadImportFiles(importSource, importAccessToken, folder.id);
+                          }
+                        }}
+                        className={cn(index === importFolderStack.length - 1 && 'font-semibold')}
+                      >
+                        {folder.name}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Back button */}
+                {importFolderStack.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleImportFolderBack}
+                    className="mb-2 w-fit"
+                  >
+                    <ArrowLeft className="mr-1 h-4 w-4" />
+                    Back
+                  </Button>
+                )}
+
+                {/* File list */}
+                <div className="flex-1 overflow-auto border rounded-lg">
+                  {importLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : importFiles.length === 0 ? (
+                    <div className="flex items-center justify-center py-8 text-muted-foreground">
+                      No files found
+                    </div>
+                  ) : (
+                    <div className="divide-y">
+                      {/* Select all header */}
+                      <div className="flex items-center gap-3 px-4 py-2 bg-muted/50">
+                        <button
+                          onClick={handleSelectAllImport}
+                          className={cn(
+                            'h-4 w-4 rounded border flex items-center justify-center',
+                            selectedImportFiles.size > 0 && selectedImportFiles.size === importFiles.filter(f => !f.isFolder).length
+                              ? 'bg-primary border-primary text-primary-foreground'
+                              : 'border-input',
+                          )}
+                        >
+                          {selectedImportFiles.size > 0 && selectedImportFiles.size === importFiles.filter(f => !f.isFolder).length && (
+                            <Check className="h-3 w-3" />
+                          )}
+                        </button>
+                        <span className="text-sm font-medium">
+                          {selectedImportFiles.size > 0
+                            ? `${selectedImportFiles.size} selected`
+                            : 'Select all files'}
+                        </span>
+                      </div>
+
+                      {/* Files */}
+                      {importFiles.map((file) => (
+                        <div
+                          key={file.id}
+                          className={cn(
+                            'flex items-center gap-3 px-4 py-2 hover:bg-accent cursor-pointer',
+                            selectedImportFiles.has(file.id) && 'bg-accent',
+                          )}
+                          onClick={() => {
+                            if (file.isFolder) {
+                              handleImportFolderNavigate({ id: file.id, name: file.name });
+                            } else {
+                              handleToggleImportFile(file.id);
+                            }
+                          }}
+                        >
+                          {!file.isFolder && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleImportFile(file.id);
+                              }}
+                              className={cn(
+                                'h-4 w-4 rounded border flex items-center justify-center',
+                                selectedImportFiles.has(file.id)
+                                  ? 'bg-primary border-primary text-primary-foreground'
+                                  : 'border-input',
+                              )}
+                            >
+                              {selectedImportFiles.has(file.id) && <Check className="h-3 w-3" />}
+                            </button>
+                          )}
+                          {file.isFolder ? (
+                            <Folder className="h-5 w-5 text-blue-500" />
+                          ) : (
+                            getFileIcon(
+                              file.mimeType.includes('word') || file.mimeType.includes('document')
+                                ? 'document'
+                                : file.mimeType.includes('sheet') || file.mimeType.includes('excel')
+                                  ? 'spreadsheet'
+                                  : file.mimeType.includes('presentation') || file.mimeType.includes('powerpoint')
+                                    ? 'presentation'
+                                    : file.mimeType === 'application/pdf'
+                                      ? 'pdf'
+                                      : file.mimeType.startsWith('image/')
+                                        ? 'image'
+                                        : 'other',
+                              'h-5 w-5',
+                            )
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate">{file.name}</div>
+                            {!file.isFolder && (
+                              <div className="text-xs text-muted-foreground">
+                                {formatSize(file.size)} • {format(new Date(file.modifiedTime), 'MMM d, yyyy')}
+                              </div>
+                            )}
+                          </div>
+                          {file.isFolder && (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-center py-12">
+                <span className="text-muted-foreground">Waiting for authentication...</span>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseImport}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmImport}
+              disabled={selectedImportFiles.size === 0 || isImporting}
+            >
+              {isImporting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Importing...
+                </>
+              ) : (
+                <>
+                  <Import className="mr-2 h-4 w-4" />
+                  Import {selectedImportFiles.size > 0 ? `(${selectedImportFiles.size})` : ''}
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
