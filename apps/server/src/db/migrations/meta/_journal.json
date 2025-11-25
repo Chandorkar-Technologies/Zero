@@ -274,6 +274,20 @@
       "when": 1751568728663,
       "tag": "0035_uneven_shiva",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1763640504080,
+      "tag": "0038_lucky_prowler",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1764056242192,
+      "tag": "0039_careless_lady_bullseye",
+      "breakpoints": true
     }
   ]
 }

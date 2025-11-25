@@ -172,7 +172,8 @@ export const connection = createTable(
     refreshToken: text('refresh_token'),
     scope: text('scope').notNull(),
     providerId: text('provider_id').$type<'google' | 'microsoft' | 'imap'>().notNull(),
-    expiresAt: timestamp('expires_at').notNull(),
+    expiresAt: timestamp('expires_at'),
+    config: jsonb('config'),
     createdAt: timestamp('created_at').notNull(),
     updatedAt: timestamp('updated_at').notNull(),
   },
@@ -181,6 +182,41 @@ export const connection = createTable(
     index('connection_user_id_idx').on(t.userId),
     index('connection_expires_at_idx').on(t.expiresAt),
     index('connection_provider_id_idx').on(t.providerId),
+  ],
+);
+
+export const email = createTable(
+  'email',
+  {
+    id: text('id').primaryKey(),
+    threadId: text('thread_id').notNull(),
+    connectionId: text('connection_id')
+      .notNull()
+      .references(() => connection.id, { onDelete: 'cascade' }),
+    messageId: text('message_id').notNull(), // Internet Message ID
+    inReplyTo: text('in_reply_to'),
+    references: text('references'),
+    subject: text('subject'),
+    from: jsonb('from').notNull(), // { name, address }
+    to: jsonb('to').notNull(), // [{ name, address }]
+    cc: jsonb('cc'),
+    bcc: jsonb('bcc'),
+    replyTo: jsonb('reply_to'),
+    snippet: text('snippet'),
+    bodyR2Key: text('body_r2_key'), // Key in R2 bucket
+    bodyHtml: text('body_html'), // Full HTML body (for local dev, null in prod)
+    internalDate: timestamp('internal_date').notNull(),
+    isRead: boolean('is_read').default(false),
+    isStarred: boolean('is_starred').default(false),
+    labels: jsonb('labels'), // IMAP folders/labels
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('email_connection_id_idx').on(t.connectionId),
+    index('email_thread_id_idx').on(t.threadId),
+    index('email_message_id_idx').on(t.messageId),
+    index('email_internal_date_idx').on(t.internalDate),
   ],
 );
 
@@ -409,109 +445,79 @@ export const oauthConsent = createTable(
   ],
 );
 
-// Meeting tables
-export const meeting = createTable(
-  'meeting',
+// LiveKit Meeting tables
+export const livekitMeeting = createTable(
+  'livekit_meeting',
   {
     id: text('id').primaryKey(),
+    roomName: text('room_name').notNull().unique(),
     title: text('title').notNull(),
     description: text('description'),
     hostId: text('host_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    roomId: text('room_id').notNull().unique(),
     scheduledFor: timestamp('scheduled_for'),
     startedAt: timestamp('started_at'),
     endedAt: timestamp('ended_at'),
     duration: integer('duration'), // in seconds
     status: text('status').notNull().default('scheduled'), // scheduled, active, ended, cancelled
-    isRecording: boolean('is_recording').default(false),
-    recordingUrl: text('recording_url'),
     maxParticipants: integer('max_participants').default(50),
-    requiresAuth: boolean('requires_auth').default(true),
-    allowChat: boolean('allow_chat').default(true),
-    allowScreenShare: boolean('allow_screen_share').default(true),
-    allowFileShare: boolean('allow_file_share').default(true),
-    createdAt: timestamp('created_at').notNull(),
-    updatedAt: timestamp('updated_at').notNull(),
+    recordingEnabled: boolean('recording_enabled').default(false),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (t) => [
-    index('meeting_host_id_idx').on(t.hostId),
-    index('meeting_room_id_idx').on(t.roomId),
-    index('meeting_status_idx').on(t.status),
-    index('meeting_scheduled_for_idx').on(t.scheduledFor),
+    index('livekit_meeting_host_id_idx').on(t.hostId),
+    index('livekit_meeting_room_name_idx').on(t.roomName),
+    index('livekit_meeting_status_idx').on(t.status),
+    index('livekit_meeting_scheduled_for_idx').on(t.scheduledFor),
   ],
 );
 
-export const meetingParticipant = createTable(
-  'meeting_participant',
+export const livekitParticipant = createTable(
+  'livekit_participant',
   {
     id: text('id').primaryKey(),
     meetingId: text('meeting_id')
       .notNull()
-      .references(() => meeting.id, { onDelete: 'cascade' }),
+      .references(() => livekitMeeting.id, { onDelete: 'cascade' }),
     userId: text('user_id').references(() => user.id, { onDelete: 'cascade' }),
-    guestName: text('guest_name'),
-    guestEmail: text('guest_email'),
-    joinedAt: timestamp('joined_at'),
+    identity: text('identity').notNull(), // LiveKit participant identity
+    name: text('name').notNull(),
+    joinedAt: timestamp('joined_at').notNull().defaultNow(),
     leftAt: timestamp('left_at'),
-    isMuted: boolean('is_muted').default(false),
-    isVideoOff: boolean('is_video_off').default(false),
-    isHandRaised: boolean('is_hand_raised').default(false),
-    role: text('role').default('participant'), // host, co-host, participant
-    createdAt: timestamp('created_at').notNull(),
+    duration: integer('duration'), // seconds in meeting
+    createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   (t) => [
-    index('meeting_participant_meeting_id_idx').on(t.meetingId),
-    index('meeting_participant_user_id_idx').on(t.userId),
-    index('meeting_participant_joined_at_idx').on(t.joinedAt),
+    index('livekit_participant_meeting_id_idx').on(t.meetingId),
+    index('livekit_participant_user_id_idx').on(t.userId),
+    index('livekit_participant_identity_idx').on(t.identity),
   ],
 );
 
-export const meetingRecording = createTable(
-  'meeting_recording',
+export const livekitRecording = createTable(
+  'livekit_recording',
   {
     id: text('id').primaryKey(),
     meetingId: text('meeting_id')
       .notNull()
-      .references(() => meeting.id, { onDelete: 'cascade' }),
+      .references(() => livekitMeeting.id, { onDelete: 'cascade' }),
+    egressId: text('egress_id').notNull(), // LiveKit egress ID
     r2Key: text('r2_key').notNull(),
     fileName: text('file_name').notNull(),
-    fileSize: integer('file_size'), // in bytes
-    duration: integer('duration'), // in seconds
-    format: text('format').default('webm'),
+    fileSize: integer('file_size'), // bytes
+    duration: integer('duration'), // seconds
+    format: text('format').default('mp4'),
     status: text('status').notNull().default('processing'), // processing, ready, failed
     startedAt: timestamp('started_at').notNull(),
     endedAt: timestamp('ended_at'),
-    createdAt: timestamp('created_at').notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   (t) => [
-    index('meeting_recording_meeting_id_idx').on(t.meetingId),
-    index('meeting_recording_status_idx').on(t.status),
-  ],
-);
-
-export const meetingMessage = createTable(
-  'meeting_message',
-  {
-    id: text('id').primaryKey(),
-    meetingId: text('meeting_id')
-      .notNull()
-      .references(() => meeting.id, { onDelete: 'cascade' }),
-    participantId: text('participant_id')
-      .notNull()
-      .references(() => meetingParticipant.id, { onDelete: 'cascade' }),
-    content: text('content').notNull(),
-    messageType: text('message_type').default('text'), // text, file, emoji, system
-    fileUrl: text('file_url'),
-    fileName: text('file_name'),
-    fileSize: integer('file_size'),
-    createdAt: timestamp('created_at').notNull(),
-  },
-  (t) => [
-    index('meeting_message_meeting_id_idx').on(t.meetingId),
-    index('meeting_message_participant_id_idx').on(t.participantId),
-    index('meeting_message_created_at_idx').on(t.createdAt),
+    index('livekit_recording_meeting_id_idx').on(t.meetingId),
+    index('livekit_recording_egress_id_idx').on(t.egressId),
+    index('livekit_recording_status_idx').on(t.status),
   ],
 );
 
