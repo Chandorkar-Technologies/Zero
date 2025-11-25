@@ -579,10 +579,23 @@ export const getActiveConnection = async () => {
   return firstConnection;
 };
 
-export const connectionToDriver = (activeConnection: typeof connection.$inferSelect) => {
+export const connectionToDriver = (activeConnection: typeof connection.$inferSelect, bucket?: R2Bucket) => {
   // IMAP connections don't use OAuth tokens, so skip them
   if (activeConnection.providerId === 'imap') {
-    throw new Error(`IMAP connections are not supported by connectionToDriver`);
+    if (!bucket) {
+      // Try to get from global env if not passed
+      if (env.THREADS_BUCKET) bucket = env.THREADS_BUCKET;
+      else throw new Error(`IMAP connections require a bucket to be passed to connectionToDriver`);
+    }
+    return createDriver('imap', {
+      connectionId: activeConnection.id,
+      auth: {
+        userId: activeConnection.userId,
+        accessToken: '',
+        refreshToken: '',
+        email: activeConnection.email,
+      }
+    }, bucket);
   }
 
   if (!activeConnection.accessToken || !activeConnection.refreshToken) {

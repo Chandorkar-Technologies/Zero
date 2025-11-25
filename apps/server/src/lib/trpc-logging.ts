@@ -28,6 +28,36 @@ export interface LoggingContext {
     userId?: string;
 }
 
+// Utility to safely sanitize objects for logging, handling circular references
+const sanitizeForLogging = (obj: any, visited = new WeakSet()): any => {
+    if (obj === null || obj === undefined) return obj;
+    if (typeof obj !== 'object') return obj;
+
+    if (visited.has(obj)) {
+        return '[Circular Reference]';
+    }
+    visited.add(obj);
+
+    if (Array.isArray(obj)) {
+        return obj.map(item => sanitizeForLogging(item, visited));
+    }
+
+    const sanitized: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+        // Skip known non-serializable fields or large objects
+        if (key === 'ctx' || key === 'req' || key === 'res') {
+            continue;
+        }
+
+        try {
+            sanitized[key] = sanitizeForLogging(value, visited);
+        } catch (err) {
+            sanitized[key] = `[Error sanitizing: ${err}]`;
+        }
+    }
+    return sanitized;
+};
+
 export const createLoggingMiddleware = () => {
     return async (opts: {
         path: string;
@@ -56,13 +86,22 @@ export const createLoggingMiddleware = () => {
         let output: any;
         let error: string | undefined;
 
+        // Helper for safe size calculation
+        const safeStringifyLength = (data: any) => {
+            try {
+                return data ? JSON.stringify(data).length : 0;
+            } catch {
+                return 0;
+            }
+        };
+
         // Start TRPC procedure execution span
         const { addRequestSpan, completeRequestSpan } = await import('./trace-context');
         const procedureSpan = addRequestSpan(c, 'trpc_procedure_execution', {
             procedure: opts.path,
             type: opts.type,
             hasInput: !!opts.input,
-            inputSize: opts.input ? JSON.stringify(opts.input).length : 0,
+            inputSize: safeStringifyLength(opts.input),
         }, {
             'trpc.procedure': opts.path,
             'trpc.type': opts.type,
@@ -77,34 +116,9 @@ export const createLoggingMiddleware = () => {
                 completeRequestSpan(c, procedureSpan.id, {
                     success: true,
                     hasOutput: !!output,
-                    outputSize: output ? JSON.stringify(output).length : 0,
+                    outputSize: safeStringifyLength(output),
                 });
             }
-
-            // Sanitize output to remove non-serializable objects
-            const sanitizeOutput = (obj: any): any => {
-                if (obj === null || obj === undefined) return obj;
-                if (typeof obj !== 'object') return obj;
-                if (Array.isArray(obj)) return obj.map(sanitizeOutput);
-
-                const sanitized: any = {};
-                for (const [key, value] of Object.entries(obj)) {
-                    // Skip known non-serializable fields
-                    if (key === 'ctx' && value && typeof value === 'object') {
-                        continue;
-                    }
-
-                    try {
-                        structuredClone(value);
-                        sanitized[key] = sanitizeOutput(value);
-                    } catch (err) {
-                        // If it can't be serialized, replace with a description
-                        console.log('[TRACE DEBUG] Non-serializable value:', err);
-                        sanitized[key] = `[Non-serializable: ${value?.constructor?.name || typeof value}]`;
-                    }
-                }
-                return sanitized;
-            };
 
             // Log successful call
             const callData: TRPCCallLog = {
@@ -114,7 +128,7 @@ export const createLoggingMiddleware = () => {
                 sessionId,
                 procedure: opts.path,
                 input: opts.input,
-                output: sanitizeOutput(output),
+                output: sanitizeForLogging(output),
                 duration: Date.now() - startTime,
                 metadata: {
                     method: opts.type,

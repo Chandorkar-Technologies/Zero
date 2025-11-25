@@ -29,7 +29,11 @@
       "r2_buckets": [
         {
           "binding": "THREADS_BUCKET",
-          "bucket_name": "threads-staging",
+          "bucket_name": "thread-staging",
+        },
+        {
+          "binding": "RECORDINGS_BUCKET",
+          "bucket_name": "recordings-local",
         },
       ],
       "durable_objects": {
@@ -66,10 +70,6 @@
           {
             "name": "SHARD_REGISTRY",
             "class_name": "ShardRegistry",
-          },
-          {
-            "name": "MEETING_ROOM",
-            "class_name": "MeetingRoom",
           },
         ],
       },
@@ -149,10 +149,6 @@
           "tag": "v9",
           "new_sqlite_classes": ["ShardRegistry"],
         },
-        {
-          "tag": "v10",
-          "new_classes": ["MeetingRoom"],
-        },
 
       ],
 
@@ -184,7 +180,9 @@
         "USE_OPENAI": "true",
         "CLOUDFLARE_ACCOUNT_ID": "",
         "CLOUDFLARE_API_TOKEN": "",
-        "MEET_AUTH_HEADER": "",
+        "LIVEKIT_API_KEY": "APIXSdBZ6bJ99WF",
+        "LIVEKIT_API_SECRET": "10Si5pzNzKNmXc1sQkoXf9frcAKKibX4Tjc9f9qS5OlB",
+        "LIVEKIT_WS_URL": "wss://nubo-a2h70w03.livekit.cloud",
         "OTEL_EXPORTER_OTLP_ENDPOINT": "https://api.axiom.co/v1/traces",
         "OTEL_SERVICE_NAME": "zero-email-server-local",
         "DD_API_KEY": "",
@@ -295,10 +293,6 @@
             "name": "SHARD_REGISTRY",
             "class_name": "ShardRegistry",
           },
-          {
-            "name": "MEETING_ROOM",
-            "class_name": "MeetingRoom",
-          },
 
         ],
       },
@@ -318,6 +312,10 @@
         {
           "binding": "THREADS_BUCKET",
           "bucket_name": "threads-staging",
+        },
+        {
+          "binding": "RECORDINGS_BUCKET",
+          "bucket_name": "recordings-staging",
         },
       ],
       "queues": {
@@ -388,10 +386,6 @@
           "tag": "v10",
           "new_sqlite_classes": ["ShardRegistry"],
         },
-        {
-          "tag": "v11",
-          "new_classes": ["MeetingRoom"],
-        },
 
       ],
       "observability": {
@@ -414,6 +408,9 @@
         "THREAD_SYNC_MAX_COUNT": "60",
         "THREAD_SYNC_LOOP": "true",
         "DISABLE_WORKFLOWS": "false",
+        "LIVEKIT_API_KEY": "",
+        "LIVEKIT_API_SECRET": "",
+        "LIVEKIT_WS_URL": "wss://meet.staging.nubo.email",
         "OTEL_EXPORTER_OTLP_ENDPOINT": "https://api.axiom.co/v1/traces",
         "OTEL_SERVICE_NAME": "zero-email-server-staging",
         "DD_API_KEY": "",
@@ -482,6 +479,10 @@
           "binding": "THREADS_BUCKET",
           "bucket_name": "threads",
         },
+        {
+          "binding": "RECORDINGS_BUCKET",
+          "bucket_name": "recordings",
+        },
       ],
       "ai": {
         "binding": "AI",
@@ -539,10 +540,6 @@
           {
             "name": "SHARD_REGISTRY",
             "class_name": "ShardRegistry",
-          },
-          {
-            "name": "MEETING_ROOM",
-            "class_name": "MeetingRoom",
           },
 
         ],
@@ -623,10 +620,6 @@
           "tag": "v10",
           "new_sqlite_classes": ["ShardRegistry"],
         },
-        {
-          "tag": "v11",
-          "new_classes": ["MeetingRoom"],
-        },
 
       ],
       "vars": {
@@ -640,6 +633,9 @@
         "THREAD_SYNC_LOOP": "true",
         "DISABLE_WORKFLOWS": "true",
         "USE_OPENAI": "false",
+        "LIVEKIT_API_KEY": "",
+        "LIVEKIT_API_SECRET": "",
+        "LIVEKIT_WS_URL": "wss://meet.nubo.email",
         "OTEL_EXPORTER_OTLP_ENDPOINT": "https://api.axiom.co/v1/traces",
         "OTEL_SERVICE_NAME": "zero-email-server-production",
         "DD_API_KEY": "",

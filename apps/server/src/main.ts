@@ -31,7 +31,6 @@ import { getZeroAgent, getZeroDB, verifyToken } from './lib/server-utils';
 import { SyncThreadsWorkflow } from './workflows/sync-threads-workflow';
 import { ShardRegistry, ZeroAgent, ZeroDriver } from './routes/agent';
 import { ThreadSyncWorker } from './routes/agent/sync-worker';
-import { MeetingRoom } from './routes/meeting-room';
 import { oAuthDiscoveryMetadata } from 'better-auth/plugins';
 import { EProviders, type IEmailSendBatch } from './types';
 import { eq, and, desc, asc, inArray } from 'drizzle-orm';
@@ -55,7 +54,10 @@ import { createAuth } from './lib/auth';
 import { aiRouter } from './routes/ai';
 import { appRouter } from './trpc';
 import { cors } from 'hono/cors';
+import { Effect } from 'effect';
 import { Hono } from 'hono';
+import { imapRouter } from './routes/imap';
+import PostalMime from 'postal-mime';
 
 const SENTRY_HOST = 'o4509328786915328.ingest.us.sentry.io';
 const SENTRY_PROJECT_IDS = new Set(['4509328795303936']);
@@ -852,7 +854,7 @@ class ZeroDB extends DurableObject<ZeroEnv> {
           .delete(subscription)
           .where(eq(subscription.userId, userId));
       },
-      catch: (error) => new Error(`Failed to delete subscription: ${error}`),
+      catch: (error: unknown) => new Error(`Failed to delete subscription: ${error}`),
     });
   }
 
@@ -921,6 +923,40 @@ const api = new Hono<HonoContext>()
 
     const auth = createAuth();
     c.set('auth', auth);
+
+    // Inject DB into context
+    try {
+      console.log('[DB_MIDDLEWARE] Starting DB injection');
+      console.log('[DB_MIDDLEWARE] HYPERDRIVE exists?', !!c.env.HYPERDRIVE);
+      console.log('[DB_MIDDLEWARE] connectionString exists?', !!c.env.HYPERDRIVE?.connectionString);
+
+      if (c.env.HYPERDRIVE?.connectionString) {
+        const result = createDb(c.env.HYPERDRIVE.connectionString);
+        const db = result.db;
+
+        console.log('[DB_MIDDLEWARE] Created db, type:', typeof db);
+        console.log('[DB_MIDDLEWARE] Created db, constructor:', db?.constructor?.name);
+        console.log('[DB_MIDDLEWARE] db has select method?', typeof db?.select === 'function');
+        console.log('[DB_MIDDLEWARE] db has query property?', !!db?.query);
+
+        // Validate that db is a proper Drizzle instance
+        if (!db || typeof db.select !== 'function') {
+          throw new Error('createDb returned invalid database instance - missing select method');
+        }
+
+        c.set('db', db);
+        console.log('[DB_MIDDLEWARE] Set c.var.db successfully');
+      } else {
+        console.error('[DB_MIDDLEWARE] HYPERDRIVE connection string missing - db will be undefined');
+        // Set db to null explicitly to avoid undefined behavior
+        c.set('db', null as any);
+      }
+    } catch (e) {
+      console.error('[DB_MIDDLEWARE] Failed to create DB connection:', e);
+      // Set db to null on error
+      c.set('db', null as any);
+    }
+
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
     c.set('sessionUser', session?.user);
 
@@ -1005,16 +1041,30 @@ const api = new Hono<HonoContext>()
     c.set('auth', undefined as any);
   })
   .route('/ai', aiRouter)
+  .route('/connections/imap', imapRouter)
   .route('/razorpay', razorpayApi)
   .route('/public', publicRouter)
   .on(['GET', 'POST', 'OPTIONS'], '/auth/*', (c) => {
     return c.var.auth.handler(c.req.raw);
   })
   .use(
+    '/trpc/*',
+    async (c, next) => {
+      console.log('TRPC Request:', {
+        path: c.req.path,
+        url: c.req.url,
+        method: c.req.method,
+        matched: c.req.routePath,
+      });
+      await next();
+    },
     trpcServer({
       endpoint: '/api/trpc',
       router: appRouter,
       createContext: (_, c) => {
+        console.log('[TRPC] createContext - c.var.db type:', typeof c.var['db']);
+        console.log('[TRPC] createContext - c.var.db is undefined?', c.var['db'] === undefined);
+        console.log('[TRPC] createContext - c.var.db constructor:', c.var['db']?.constructor?.name);
         return { c, sessionUser: c.var['sessionUser'], db: c.var['db'] };
       },
       allowMethodOverride: true,
@@ -1041,6 +1091,10 @@ const app = new Hono<HonoContext>()
     cors({
       origin: (origin) => {
         if (!origin) return null;
+
+        // Explicitly allow localhost:3000 for development
+        if (origin === 'http://localhost:3000') return origin;
+
         let hostname: string;
         try {
           hostname = new URL(origin).hostname;
@@ -1159,6 +1213,57 @@ const app = new Hono<HonoContext>()
     } catch (e) {
       console.error('error tunneling to sentry', e);
       return c.json({ error: 'error tunneling to sentry' }, { status: 500 });
+    }
+  })
+  .get('/recordings/:r2Key', async (c) => {
+    try {
+      const r2Key = c.req.param('r2Key');
+
+      // Get the recording from R2
+      const object = await c.env.RECORDINGS_BUCKET.get(r2Key);
+
+      if (!object) {
+        return c.json({ error: 'Recording not found' }, { status: 404 });
+      }
+
+      // Stream the recording
+      const headers = new Headers();
+      headers.set('Content-Type', object.httpMetadata?.contentType || 'video/mp4');
+      headers.set('Content-Length', object.size.toString());
+      headers.set('Cache-Control', 'public, max-age=31536000');
+
+      return new Response(object.body, {
+        headers,
+      });
+    } catch (e) {
+      console.error('error serving recording', e);
+      return c.json({ error: 'error serving recording' }, { status: 500 });
+    }
+  })
+  .post('/webhooks/livekit/egress', async (c) => {
+    try {
+      // Handle LiveKit egress webhook for recording completion
+      const body = await c.req.json<{
+        event: string;
+        egressId: string;
+        roomName: string;
+        file?: {
+          filename: string;
+          size: number;
+          duration: number;
+        };
+      }>();
+
+      if (body.event === 'egress_ended' && body.file) {
+        // Store the recording file to R2 if you're receiving it
+        // This is a placeholder - actual implementation depends on your LiveKit setup
+        console.log('Egress completed:', body);
+      }
+
+      return c.json({ success: true });
+    } catch (e) {
+      console.error('error handling egress webhook', e);
+      return c.json({ error: 'error handling webhook' }, { status: 500 });
     }
   })
   .post('/a8n/notify/:providerId', async (c) => {
@@ -1404,6 +1509,82 @@ export default class Entry extends WorkerEntrypoint<ZeroEnv> {
     await this.processExpiredSubscriptions();
   }
 
+  async email(message: ForwardableEmailMessage, env: ZeroEnv, _ctx: ExecutionContext) {
+    console.log(`[EMAIL] Received email from ${message.from} to ${message.to}`);
+
+    try {
+      // 1. Parse Email
+      const parser = new PostalMime();
+      const rawEmail = await new Response(message.raw).arrayBuffer();
+      const parsed = await parser.parse(rawEmail);
+
+      // 2. Store Raw in R2
+      const messageId = message.headers.get('Message-ID') || crypto.randomUUID();
+      const r2Key = `email/${messageId}`;
+      await env.THREADS_BUCKET.put(r2Key, rawEmail);
+
+      // 3. Find Connection
+      const { db, conn } = createDb(env.HYPERDRIVE.connectionString);
+      const recipient = message.to;
+
+      // Find connection where email matches recipient
+      const foundConnection = await db.query.connection.findFirst({
+        where: eq(connection.email, recipient),
+      });
+
+      if (!foundConnection) {
+        console.log(`[EMAIL] No connection found for recipient ${recipient}`);
+        await conn.end();
+        // We don't reject because that would bounce. We just ignore for now.
+        return;
+      }
+
+      // 4. Determine Thread ID
+      let threadId = crypto.randomUUID();
+      const inReplyTo = parsed.inReplyTo;
+
+      if (inReplyTo) {
+        // Try to find parent message
+        // Note: inReplyTo from postal-mime might be a string or array? Usually string.
+        // We need to check schema for email table.
+        const parent = await db.query.email.findFirst({
+          where: eq(email.messageId, inReplyTo),
+        });
+        if (parent) {
+          threadId = parent.threadId;
+        }
+      }
+
+      // 5. Insert into DB
+      await db.insert(email).values({
+        id: crypto.randomUUID(),
+        threadId,
+        connectionId: foundConnection.id,
+        messageId: parsed.messageId || messageId,
+        inReplyTo: parsed.inReplyTo,
+        references: typeof parsed.references === 'string' ? parsed.references : (Array.isArray(parsed.references) ? parsed.references.join(' ') : null),
+        subject: parsed.subject || '(No Subject)',
+        from: parsed.from ? { name: parsed.from.name, address: parsed.from.address } : { name: '', address: message.from },
+        to: parsed.to?.map(t => ({ name: t.name, address: t.address })) || [],
+        cc: parsed.cc?.map(t => ({ name: t.name, address: t.address })) || [],
+        bcc: parsed.bcc?.map(t => ({ name: t.name, address: t.address })) || [],
+        bodyR2Key: r2Key,
+        internalDate: new Date(parsed.date || Date.now()),
+        snippet: parsed.text?.substring(0, 200) || '',
+        isRead: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        // labels: [], // Default labels?
+      });
+
+      await conn.end();
+      console.log(`[EMAIL] Processed email ${messageId} for connection ${foundConnection.id}`);
+
+    } catch (error) {
+      console.error('[EMAIL] Error processing email:', error);
+    }
+  }
+
   private async processScheduledEmails() {
     console.log('Checking for scheduled emails ready to be queued...');
     const { scheduled_emails: scheduledKV, send_email_queue } = this.env as {
@@ -1561,5 +1742,4 @@ export {
   SyncThreadsWorkflow,
   SyncThreadsCoordinatorWorkflow,
   ShardRegistry,
-  MeetingRoom,
 };

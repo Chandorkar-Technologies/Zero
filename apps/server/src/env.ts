@@ -1,6 +1,5 @@
 import type { ThinkingMCP, ThreadSyncWorker, WorkflowRunner, ZeroDB, ZeroMCP } from './main';
 import type { ShardRegistry, ZeroAgent, ZeroDriver } from './routes/agent';
-import type { MeetingRoom } from './routes/meeting-room';
 
 import { env as _env } from 'cloudflare:workers';
 import type { QueryableHandler } from 'dormroom';
@@ -14,7 +13,6 @@ export type ZeroEnv = {
   THINKING_MCP: DurableObjectNamespace<ThinkingMCP & QueryableHandler>;
   WORKFLOW_RUNNER: DurableObjectNamespace<WorkflowRunner & QueryableHandler>;
   THREAD_SYNC_WORKER: DurableObjectNamespace<ThreadSyncWorker>;
-  MEETING_ROOM: DurableObjectNamespace<MeetingRoom>;
   SYNC_THREADS_WORKFLOW: Workflow;
   SYNC_THREADS_COORDINATOR_WORKFLOW: Workflow;
   HYPERDRIVE: { connectionString: string };
@@ -97,9 +95,10 @@ export type ZeroEnv = {
   VECTORIZE: VectorizeIndex;
   VECTORIZE_MESSAGE: VectorizeIndex;
   DEV_PROXY: string;
-  MEET_AUTH_HEADER: string;
-  MEET_API_URL: string;
-  ENABLE_MEET: 'true' | 'false';
+  LIVEKIT_API_KEY: string;
+  LIVEKIT_API_SECRET: string;
+  LIVEKIT_WS_URL: string;
+  RECORDINGS_BUCKET: R2Bucket;
   OTEL_EXPORTER_OTLP_ENDPOINT?: string;
   OTEL_EXPORTER_OTLP_HEADERS?: string;
   OTEL_SERVICE_NAME?: string;
