@@ -36,18 +36,26 @@ export function EmailCard({ email }: EmailCardProps) {
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const { mutate: removeEmail } = useMutation({
+  const { mutate: removeEmail, isPending: isRemoving } = useMutation({
     ...trpc.kanban.removeEmail.mutationOptions(),
     onSuccess: () => {
-      // Invalidate the board query to refresh
+      console.log('[EmailCard] Email removed successfully');
+      // Invalidate all kanban queries to refresh
       queryClient.invalidateQueries({
-        predicate: (query) => query.queryKey[0] === 'kanban.getBoardWithColumns',
+        queryKey: ['kanban'],
       });
+    },
+    onError: (error) => {
+      console.error('[EmailCard] Error removing email:', error);
     },
   });
 
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation();
+    console.log('[EmailCard] Removing email:', {
+      threadId: email.threadId,
+      connectionId: email.connectionId,
+    });
     removeEmail({
       threadId: email.threadId,
       connectionId: email.connectionId,
@@ -64,19 +72,18 @@ export function EmailCard({ email }: EmailCardProps) {
       ref={setNodeRef}
       style={style}
       className="group relative cursor-pointer rounded-lg border bg-card p-3 shadow-sm transition-shadow hover:shadow-md"
-      onClick={handleClick}
     >
       <div className="flex items-start gap-2">
-        <button
+        <div
           {...attributes}
           {...listeners}
-          className="cursor-grab touch-none text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 active:cursor-grabbing"
+          className="cursor-grab touch-none text-muted-foreground transition-opacity hover:text-foreground active:cursor-grabbing pt-0.5"
           onClick={(e) => e.stopPropagation()}
         >
           <GripVertical className="h-4 w-4" />
-        </button>
+        </div>
 
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1" onClick={handleClick}>
           <div className="flex items-start justify-between gap-2">
             <p className="truncate font-medium text-sm">
               {(email as any).subject || 'No Subject'}
@@ -86,6 +93,7 @@ export function EmailCard({ email }: EmailCardProps) {
               size="icon"
               className="h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
               onClick={handleRemove}
+              disabled={isRemoving}
             >
               <X className="h-3 w-3" />
             </Button>

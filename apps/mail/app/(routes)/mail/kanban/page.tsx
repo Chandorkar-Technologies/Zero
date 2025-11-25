@@ -129,13 +129,13 @@ export default function KanbanPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b px-6 py-3">
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between border-b px-4 sm:px-6 py-3 flex-shrink-0">
         <Select
           value={currentBoard?.id || ''}
           onValueChange={setSelectedBoardId}
         >
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger className="w-full sm:w-[200px]">
             <SelectValue placeholder="Select board" />
           </SelectTrigger>
           <SelectContent>
@@ -148,35 +148,36 @@ export default function KanbanPage() {
           </SelectContent>
         </Select>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             onClick={handleDeleteBoard}
             disabled={isDeleting || !currentBoard}
             variant="outline"
             size="sm"
+            className="flex-1 sm:flex-none"
           >
             {isDeleting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Deleting...
+                <span className="hidden sm:inline">Deleting...</span>
               </>
             ) : (
               <>
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete Board
+                <Trash2 className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Delete Board</span>
               </>
             )}
           </Button>
-          <Button onClick={handleCreateBoard} disabled={isCreating} variant="outline" size="sm">
+          <Button onClick={handleCreateBoard} disabled={isCreating} variant="outline" size="sm" className="flex-1 sm:flex-none">
             {isCreating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating...
+                <span className="hidden sm:inline">Creating...</span>
               </>
             ) : (
               <>
-                <Plus className="mr-2 h-4 w-4" />
-                New Board
+                <Plus className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">New Board</span>
               </>
             )}
           </Button>

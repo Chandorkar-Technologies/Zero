@@ -6,6 +6,7 @@ import { Loader2, Users as UsersIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import type { Outputs } from '@zero/server/trpc';
+import { useActiveConnection } from '@/hooks/use-connections';
 
 type Teammate = Outputs['people']['getPeople'][0];
 
@@ -14,19 +15,37 @@ export default function TeammatesPage() {
   const [selectedTeammate, setSelectedTeammate] = useState<Teammate | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Get all connections
+  // Get all connections first
   const { data: connectionsData } = useQuery(trpc.connections.list.queryOptions());
   const connections = connectionsData?.connections;
 
-  const connectionId = connections?.[0]?.id;
+  // Get active connection to determine which one to use
+  const { data: activeConnection, isLoading: isLoadingActive } = useActiveConnection();
+
+  // Use active connection if available, otherwise fall back to first connection
+  const connectionId = activeConnection?.id || connections?.[0]?.id;
+
+  console.log('[TeammatesPage] Using connection:', {
+    activeConnection,
+    connections: connections?.length,
+    connectionId,
+    enabled: !!connectionId
+  });
 
   // Get teammates
-  const { data: teammates, isLoading } = useQuery({
+  const { data: teammates, isLoading, error } = useQuery({
     ...trpc.people.getPeople.queryOptions({
-      connectionId: connectionId || '',
+      connectionId: connectionId!,
       minThreads: 2,
     }),
     enabled: !!connectionId,
+  });
+
+  console.log('[TeammatesPage] Query result:', {
+    teammates,
+    isLoading,
+    error,
+    teammatesLength: teammates?.length
   });
 
   const filteredTeammates = teammates?.filter(
@@ -46,7 +65,7 @@ export default function TeammatesPage() {
     );
   }
 
-  if (isLoading) {
+  if (isLoading || isLoadingActive || !connectionId) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

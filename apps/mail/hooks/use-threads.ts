@@ -77,10 +77,27 @@ export const useThread = (threadId: string | null) => {
       },
       {
         enabled: !!id && !!session?.user?.id,
-        staleTime: 1000 * 60 * 60, // 1 minute
+        staleTime: 0, // Force fresh data every time (was: 1000 * 60 * 60)
       },
     ),
   );
+
+  // Debug logging
+  console.log('[useThread] Debug Info:', {
+    threadId,
+    _threadId,
+    computedId: id,
+    sessionUserId: session?.user?.id,
+    enabled: !!id && !!session?.user?.id,
+    queryStatus: threadQuery.status,
+    isFetching: threadQuery.isFetching,
+    isPending: threadQuery.isPending,
+    isSuccess: threadQuery.isSuccess,
+    hasData: !!threadQuery.data,
+    dataUpdatedAt: threadQuery.dataUpdatedAt,
+    latestMessageBody: threadQuery.data?.messages?.[0]?.body?.substring(0, 100),
+    messageCount: threadQuery.data?.messages?.length,
+  });
 
   const { latestDraft, isGroupThread, finalData, latestMessage } = useMemo(() => {
     if (!threadQuery.data) {

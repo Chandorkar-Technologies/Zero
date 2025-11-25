@@ -61,6 +61,17 @@ export default defineConfig({
     warmup: {
       clientFiles: ['./app/**/*', './components/**/*'],
     },
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8787',
+        changeOrigin: true,
+      },
+      '/agents': {
+        target: 'ws://localhost:8787',
+        ws: true,
+        changeOrigin: true,
+      },
+    },
   },
   //   ssr: {
   //     optimizeDeps: {

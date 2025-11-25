@@ -5,7 +5,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { Mail, MessageSquare, TrendingUp } from 'lucide-react';
 import type { Outputs } from '@zero/server/trpc';
 
-type Teammate = Outputs['teammates']['getTeammates'][0];
+type Teammate = Outputs['people']['getPeople'][0];
 
 interface TeammateCardProps {
   teammate: Teammate;

@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Outputs } from '@zero/server/trpc';
+import { useActiveConnection } from '@/hooks/use-connections';
 
 type Notification = Outputs['notifications']['getNotifications'][0];
 
@@ -17,16 +18,20 @@ export default function NotificationsPage() {
     'all'
   );
 
-  // Get all connections
+  // Get all connections first
   const { data: connectionsData } = useQuery(trpc.connections.list.queryOptions());
   const connections = connectionsData?.connections;
 
-  const connectionId = connections?.[0]?.id;
+  // Get active connection to determine which one to use
+  const { data: activeConnection, isLoading: isLoadingActive } = useActiveConnection();
+
+  // Use active connection if available, otherwise fall back to first connection
+  const connectionId = activeConnection?.id || connections?.[0]?.id;
 
   // Get all notifications
   const { data: notifications, isLoading } = useQuery({
     ...trpc.notifications.getNotifications.queryOptions({
-      connectionId: connectionId || '',
+      connectionId: connectionId!,
       limit: 100,
     }),
     enabled: !!connectionId,
@@ -35,7 +40,7 @@ export default function NotificationsPage() {
   // Get notification counts
   const { data: counts } = useQuery({
     ...trpc.notifications.getNotificationCounts.queryOptions({
-      connectionId: connectionId || '',
+      connectionId: connectionId!,
     }),
     enabled: !!connectionId,
   });
@@ -82,7 +87,7 @@ export default function NotificationsPage() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || isLoadingActive || !connectionId) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

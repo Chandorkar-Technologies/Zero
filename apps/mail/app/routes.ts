@@ -13,6 +13,7 @@ export default [
     route('/privacy', '(full-width)/privacy.tsx'),
     route('/contributors', '(full-width)/contributors.tsx'),
     route('/hr', '(full-width)/hr.tsx'),
+    route('/meet/:meetingId', '(full-width)/meet/[meetingId]/page.tsx'),
   ]),
 
   route('/login', '(auth)/login/page.tsx'),
@@ -24,7 +25,6 @@ export default [
   layout('(routes)/layout.tsx', [
     route('/developer', '(routes)/developer/page.tsx'),
     route('/meet', '(routes)/meet/page.tsx'),
-    route('/meet/:roomId', '(routes)/meet/[roomId]/page.tsx'),
     layout(
       '(routes)/mail/layout.tsx',
       prefix('/mail', [
