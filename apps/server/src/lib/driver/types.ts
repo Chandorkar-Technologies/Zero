@@ -10,6 +10,7 @@ export interface IGetThreadResponse {
   totalReplies: number;
   labels: { id: string; name: string }[];
   isLatestDraft?: boolean;
+  connectionId?: string;
 }
 
 export const IGetThreadResponseSchema = z.object({
@@ -18,6 +19,7 @@ export const IGetThreadResponseSchema = z.object({
   hasUnread: z.boolean(),
   totalReplies: z.number(),
   labels: z.array(z.object({ id: z.string(), name: z.string() })),
+  connectionId: z.string().optional(),
 });
 
 export interface ParsedDraft {
@@ -41,6 +43,7 @@ export interface IConfig {
 }
 
 export type ManagerConfig = {
+  connectionId?: string; // Added for IMAP
   auth: {
     userId: string;
     // accountId: string;
