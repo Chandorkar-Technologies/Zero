@@ -1,10 +1,10 @@
 import { privateProcedure, router } from '../trpc';
-import { getZeroDB, getZeroAgent } from '../../lib/server-utils';
+import { getZeroAgent } from '../../lib/server-utils';
 import { z } from 'zod';
 import { getContext } from 'hono/context-storage';
 import type { HonoContext } from '../../ctx';
-import { email } from '../../db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { email, connection } from '../../db/schema';
+import { eq, desc, and } from 'drizzle-orm';
 
 interface Notification {
   id: string;
@@ -129,16 +129,19 @@ export const notificationsRouter = router({
       const { connectionId, types, limit } = input;
       const { sessionUser } = ctx;
 
-      // Get connection from Durable Object
-      const db = await getZeroDB(sessionUser.id);
-      const connection = await db.findUserConnection(connectionId);
+      // Query connection directly from PostgreSQL database
+      const [foundConnection] = await ctx.db
+        .select()
+        .from(connection)
+        .where(and(eq(connection.id, connectionId), eq(connection.userId, sessionUser.id)))
+        .limit(1);
 
-      if (!connection) {
+      if (!foundConnection) {
         throw new Error('Connection not found');
       }
 
       // Check if this is an IMAP connection - query from local database
-      if (connection.providerId === 'imap') {
+      if (foundConnection.providerId === 'imap') {
         // Query emails from local PostgreSQL database
         const emails = await ctx.db
           .select({
@@ -234,16 +237,19 @@ export const notificationsRouter = router({
       const { connectionId } = input;
       const { sessionUser } = ctx;
 
-      // Get connection from Durable Object
-      const db = await getZeroDB(sessionUser.id);
-      const connection = await db.findUserConnection(connectionId);
+      // Query connection directly from PostgreSQL database
+      const [foundConnection] = await ctx.db
+        .select()
+        .from(connection)
+        .where(and(eq(connection.id, connectionId), eq(connection.userId, sessionUser.id)))
+        .limit(1);
 
-      if (!connection) {
+      if (!foundConnection) {
         throw new Error('Connection not found');
       }
 
       // Check if this is an IMAP connection - query from local database
-      if (connection.providerId === 'imap') {
+      if (foundConnection.providerId === 'imap') {
         // Query emails from local PostgreSQL database
         const emails = await ctx.db
           .select({

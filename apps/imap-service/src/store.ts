@@ -35,4 +35,25 @@ export class Store {
         console.log(`[Store] Successfully saved to R2: ${key}`);
         return key;
     }
+
+    async saveAttachment(
+        connectionId: string,
+        emailId: string,
+        attachmentId: string,
+        content: Buffer,
+        contentType: string
+    ): Promise<string> {
+        const key = `${connectionId}/attachments/${emailId}/${attachmentId}`;
+        console.log(`[Store] Saving attachment to R2: bucket=${this.bucketName}, key=${key}`);
+        await this.client.send(
+            new PutObjectCommand({
+                Bucket: this.bucketName,
+                Key: key,
+                Body: content,
+                ContentType: contentType,
+            })
+        );
+        console.log(`[Store] Successfully saved attachment to R2: ${key}`);
+        return key;
+    }
 }

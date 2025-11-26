@@ -1,7 +1,8 @@
 import { privateProcedure, router } from '../trpc';
 import { z } from 'zod';
-import { email } from '../../db/schema';
+import { email, connection } from '../../db/schema';
 import { eq, sql, and, isNotNull } from 'drizzle-orm';
+import { env } from '../../env';
 
 interface Attachment {
   id: string;
@@ -9,6 +10,7 @@ interface Attachment {
   contentType: string;
   size: number;
   contentId: string | null;
+  r2Key?: string | null;
 }
 
 interface AttachmentWithEmail {
@@ -17,6 +19,7 @@ interface AttachmentWithEmail {
   mimeType: string; // Changed from contentType to match frontend
   size: number;
   contentId: string | null;
+  r2Key: string | null;
   threadId: string; // Changed from emailId to match frontend
   subject: string | null;
   from: { name?: string; address: string };
@@ -85,6 +88,7 @@ export const attachmentsRouter = router({
             mimeType: att.contentType, // Map contentType to mimeType
             size: att.size,
             contentId: att.contentId,
+            r2Key: att.r2Key || null,
             threadId: e.id, // Map emailId to threadId for frontend
             subject: e.subject,
             from: e.from as { name?: string; address: string },
@@ -141,5 +145,77 @@ export const attachmentsRouter = router({
       }
 
       return stats;
+    }),
+
+  getAttachmentContent: privateProcedure
+    .input(
+      z.object({
+        connectionId: z.string(),
+        attachmentId: z.string(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const { connectionId, attachmentId } = input;
+      const { sessionUser } = ctx;
+
+      // Verify the user owns this connection
+      const [foundConnection] = await ctx.db
+        .select()
+        .from(connection)
+        .where(and(eq(connection.id, connectionId), eq(connection.userId, sessionUser.id)))
+        .limit(1);
+
+      if (!foundConnection) {
+        throw new Error('Connection not found');
+      }
+
+      // Find the email containing this attachment
+      const emails = await ctx.db
+        .select({
+          attachments: email.attachments,
+        })
+        .from(email)
+        .where(
+          and(
+            eq(email.connectionId, connectionId),
+            isNotNull(email.attachments),
+            sql`${email.attachments}::jsonb @> ${JSON.stringify([{ id: attachmentId }])}::jsonb`,
+          ),
+        )
+        .limit(1);
+
+      if (!emails.length) {
+        throw new Error('Attachment not found');
+      }
+
+      const attachments = (emails[0].attachments as Attachment[]) || [];
+      const attachment = attachments.find((a) => a.id === attachmentId);
+
+      if (!attachment) {
+        throw new Error('Attachment not found');
+      }
+
+      if (!attachment.r2Key) {
+        throw new Error('Attachment content not available - missing r2Key');
+      }
+
+      // Fetch content from R2
+      const bucket = env.THREADS_BUCKET;
+      const object = await bucket.get(attachment.r2Key);
+
+      if (!object) {
+        throw new Error('Attachment content not found in storage');
+      }
+
+      const arrayBuffer = await object.arrayBuffer();
+      const base64 = Buffer.from(arrayBuffer).toString('base64');
+
+      return {
+        id: attachment.id,
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        size: attachment.size,
+        content: base64, // Base64 encoded content
+      };
     }),
 });

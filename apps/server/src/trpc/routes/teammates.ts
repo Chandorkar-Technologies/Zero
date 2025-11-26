@@ -1,6 +1,7 @@
 import { privateProcedure, router } from '../trpc';
-import { getZeroDB } from '../../lib/server-utils';
 import { z } from 'zod';
+import { connection } from '../../db/schema';
+import { eq as eqOp, and as andOp } from 'drizzle-orm';
 
 interface TeammateContact {
   email: string;
@@ -28,16 +29,19 @@ export const peopleRouter = router({
 
         console.log('[getPeople] Called with connectionId:', connectionId, 'minThreads:', minThreads);
 
-        // Get connection from Durable Object to get user email
-        const db = await getZeroDB(sessionUser.id);
-        const connection = await db.findUserConnection(connectionId);
+        // Query connection directly from PostgreSQL database
+        const [foundConnection] = await ctx.db
+          .select()
+          .from(connection)
+          .where(andOp(eqOp(connection.id, connectionId), eqOp(connection.userId, sessionUser.id)))
+          .limit(1);
 
-        if (!connection) {
+        if (!foundConnection) {
           console.log('[getPeople] Connection not found:', connectionId);
           throw new Error('Connection not found');
         }
 
-        const userEmail = connection.email.toLowerCase();
+        const userEmail = foundConnection.email.toLowerCase();
         const userDomain = userEmail.split('@')[1] || '';
 
         // Import schemas and query helpers for email queries

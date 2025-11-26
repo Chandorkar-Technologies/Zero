@@ -113,16 +113,40 @@ export class SyncEngine {
 
                     const bodyR2Key = await this.store.saveEmail(conn.id, threadId, emailBodyData);
 
-                    // Extract attachment metadata
-                    const attachments = (parsed.attachments || []).map((att, idx) => ({
-                        id: `${conn.id}-${message.uid}-att-${idx}`,
-                        filename: att.filename || `attachment-${idx}`,
-                        contentType: att.contentType || 'application/octet-stream',
-                        size: att.size || 0,
-                        contentId: att.contentId || null,
-                        // Note: We're storing metadata only, not the actual file content
-                        // Content could be stored to R2 if needed in the future
-                    }));
+                    // Extract and save attachments
+                    const attachments = [];
+                    for (let idx = 0; idx < (parsed.attachments || []).length; idx++) {
+                        const att = parsed.attachments![idx];
+                        const attachmentId = `${conn.id}-${message.uid}-att-${idx}`;
+                        const filename = att.filename || `attachment-${idx}`;
+                        const contentType = att.contentType || 'application/octet-stream';
+
+                        // Save attachment content to R2
+                        let r2Key: string | null = null;
+                        if (att.content) {
+                            try {
+                                r2Key = await this.store.saveAttachment(
+                                    conn.id,
+                                    `${conn.id}-${message.uid}`,
+                                    attachmentId,
+                                    att.content,
+                                    contentType
+                                );
+                                this.logger.info(`Saved attachment ${attachmentId} to R2: ${r2Key}`);
+                            } catch (error) {
+                                this.logger.error(error, `Failed to save attachment ${attachmentId} to R2`);
+                            }
+                        }
+
+                        attachments.push({
+                            id: attachmentId,
+                            filename,
+                            contentType,
+                            size: att.size || 0,
+                            contentId: att.contentId || null,
+                            r2Key,
+                        });
+                    }
 
                     // 2. Save metadata to Postgres
                     // Use a deterministic ID based on connectionId and UID to prevent duplicates
