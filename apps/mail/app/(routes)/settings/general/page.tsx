@@ -326,7 +326,7 @@ export default function GeneralPage() {
   const [_savingUsername, setSavingUsername] = useState(false);
 
   // Fetch current username - using trpc directly since the endpoints are in drive router
-  const { data: usernameData, refetch: refetchUsername } = useQuery({
+  const { data: usernameData, refetch: refetchUsername, isLoading: isUsernameLoading } = useQuery({
     queryKey: ['username'],
     queryFn: async () => {
       try {
@@ -444,7 +444,11 @@ export default function GeneralPage() {
         description="Your unique Nubo username for sharing and collaboration."
       >
         <div className="space-y-4">
-          {usernameData?.username ? (
+          {isUsernameLoading ? (
+            <div className="text-sm text-muted-foreground">
+              Loading username...
+            </div>
+          ) : usernameData?.username ? (
             <div className="rounded-lg bg-muted/50 p-4">
               <div className="flex items-center gap-2 mb-2">
                 <AtSign className="h-5 w-5 text-primary" />
@@ -455,8 +459,10 @@ export default function GeneralPage() {
               </p>
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">
-              Loading username...
+            <div className="rounded-lg bg-muted/50 p-4">
+              <p className="text-sm text-muted-foreground">
+                No username set yet. Your Nubo username will appear here once configured.
+              </p>
             </div>
           )}
         </div>

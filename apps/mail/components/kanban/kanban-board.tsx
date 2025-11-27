@@ -4,8 +4,6 @@ import { DndContext, DragOverlay, closestCorners, type DragEndEvent, type DragSt
 import { useState } from 'react';
 import { KanbanColumn } from './kanban-column';
 import { EmailCard } from './email-card';
-import { Button } from '@/components/ui/button';
-import { Plus } from 'lucide-react';
 import type { Outputs } from '@zero/server/trpc';
 
 type BoardWithColumns = Outputs['kanban']['getBoardWithColumns'];
@@ -34,15 +32,6 @@ export function KanbanBoard({ boardId }: KanbanBoardProps) {
 
   const { mutate: moveEmail } = useMutation({
     ...trpc.kanban.moveEmail.mutationOptions(),
-    onSuccess: () => {
-      queryClient.invalidateQueries(
-        trpc.kanban.getBoardWithColumns.queryOptions({ boardId })
-      );
-    },
-  });
-
-  const { mutate: createColumn } = useMutation({
-    ...trpc.kanban.createColumn.mutationOptions(),
     onSuccess: () => {
       queryClient.invalidateQueries(
         trpc.kanban.getBoardWithColumns.queryOptions({ boardId })
@@ -146,20 +135,6 @@ export function KanbanBoard({ boardId }: KanbanBoardProps) {
     }
   };
 
-  const handleAddColumn = () => {
-    // eslint-disable-next-line no-alert
-    const columnName = prompt('Enter column name:');
-    if (!columnName || !board) return;
-
-    const position = board.columns.length;
-    createColumn({
-      boardId: board.id,
-      name: columnName,
-      color: '#6366f1',
-      position,
-    });
-  };
-
   if (isLoading || !board) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -170,16 +145,6 @@ export function KanbanBoard({ boardId }: KanbanBoardProps) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="border-b px-4 sm:px-6 py-4 flex-shrink-0">
-        <div className="flex items-center justify-between gap-2">
-          <h1 className="text-xl sm:text-2xl font-semibold truncate">{board.name}</h1>
-          <Button onClick={handleAddColumn} variant="outline" size="sm" className="flex-shrink-0">
-            <Plus className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Add Column</span>
-          </Button>
-        </div>
-      </div>
-
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}

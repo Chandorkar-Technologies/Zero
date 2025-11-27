@@ -4,6 +4,10 @@ import { email, connection } from '../../db/schema';
 import { eq, sql, and, isNotNull } from 'drizzle-orm';
 import { env } from '../../env';
 
+// Note: Attachments feature currently only works for IMAP connections.
+// For OAuth connections (Google/Outlook), attachments are fetched on-demand
+// from provider APIs and not cached locally.
+
 interface Attachment {
   id: string;
   filename: string;
@@ -51,8 +55,27 @@ export const attachmentsRouter = router({
     )
     .query(async ({ input, ctx }) => {
       const { connectionId, fileType, limit } = input;
+      const { sessionUser } = ctx;
 
-      // Query emails that have attachments (non-null and non-empty array)
+      // Check connection type first
+      const [foundConnection] = await ctx.db
+        .select()
+        .from(connection)
+        .where(and(eq(connection.id, connectionId), eq(connection.userId, sessionUser.id)))
+        .limit(1);
+
+      if (!foundConnection) {
+        throw new Error('Connection not found');
+      }
+
+      // For OAuth connections (Google/Outlook), return empty array
+      // Attachments are not cached locally for OAuth connections
+      if (foundConnection.providerId !== 'imap') {
+        console.log('[getAllAttachments] OAuth connection - attachments not cached locally');
+        return [];
+      }
+
+      // Query emails that have attachments (non-null and non-empty array) - IMAP only
       const emails = await ctx.db
         .select({
           id: email.id,
@@ -109,8 +132,33 @@ export const attachmentsRouter = router({
     )
     .query(async ({ input, ctx }) => {
       const { connectionId } = input;
+      const { sessionUser } = ctx;
 
-      // Query all emails with attachments (non-null and non-empty array)
+      // Check connection type first
+      const [foundConnection] = await ctx.db
+        .select()
+        .from(connection)
+        .where(and(eq(connection.id, connectionId), eq(connection.userId, sessionUser.id)))
+        .limit(1);
+
+      if (!foundConnection) {
+        throw new Error('Connection not found');
+      }
+
+      // For OAuth connections (Google/Outlook), return zero stats
+      // Attachments are not cached locally for OAuth connections
+      if (foundConnection.providerId !== 'imap') {
+        return {
+          total: 0,
+          images: 0,
+          documents: 0,
+          spreadsheets: 0,
+          other: 0,
+          totalSize: 0,
+        };
+      }
+
+      // Query all emails with attachments (non-null and non-empty array) - IMAP only
       const emails = await ctx.db
         .select({
           attachments: email.attachments,
@@ -169,7 +217,12 @@ export const attachmentsRouter = router({
         throw new Error('Connection not found');
       }
 
-      // Find the email containing this attachment
+      // For OAuth connections (Google/Outlook), attachments are not cached locally
+      if (foundConnection.providerId !== 'imap') {
+        throw new Error('Attachment content not available for OAuth connections - attachments are fetched on-demand from provider');
+      }
+
+      // Find the email containing this attachment - IMAP only
       const emails = await ctx.db
         .select({
           attachments: email.attachments,

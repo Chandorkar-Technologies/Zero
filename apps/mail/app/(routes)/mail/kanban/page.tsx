@@ -2,7 +2,7 @@ import { useTRPC } from '@/providers/query-provider';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { KanbanBoard } from '@/components/kanban/kanban-board';
 import { Button } from '@/components/ui/button';
-import { Plus, Loader2, Trash2, ArrowLeft } from 'lucide-react';
+import { Plus, Loader2, Trash2, ArrowLeft, Columns } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
@@ -51,6 +51,34 @@ export default function KanbanPage() {
       console.error('[KanbanPage] Error deleting board:', error);
     },
   });
+
+  const { mutate: createColumn, isPending: isCreatingColumn } = useMutation({
+    ...trpc.kanban.createColumn.mutationOptions(),
+    onSuccess: () => {
+      if (currentBoard) {
+        queryClient.invalidateQueries(
+          trpc.kanban.getBoardWithColumns.queryOptions({ boardId: currentBoard.id })
+        );
+      }
+    },
+    onError: (error: any) => {
+      console.error('[KanbanPage] Error creating column:', error);
+    },
+  });
+
+  const handleAddColumn = () => {
+    if (!currentBoard) return;
+    // eslint-disable-next-line no-alert
+    const columnName = prompt('Enter column name:');
+    if (!columnName || !columnName.trim()) return;
+
+    createColumn({
+      boardId: currentBoard.id,
+      name: columnName.trim(),
+      color: '#6366f1',
+      position: 0, // Will be appended; actual position handled by getBoardWithColumns query
+    });
+  };
 
   const handleCreateBoard = () => {
     // eslint-disable-next-line no-alert
@@ -157,6 +185,25 @@ export default function KanbanPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={handleAddColumn}
+            disabled={isCreatingColumn || !currentBoard}
+            variant="outline"
+            size="sm"
+            className="flex-1 sm:flex-none"
+          >
+            {isCreatingColumn ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <span className="hidden sm:inline">Adding...</span>
+              </>
+            ) : (
+              <>
+                <Columns className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Add Column</span>
+              </>
+            )}
+          </Button>
           <Button
             onClick={handleDeleteBoard}
             disabled={isDeleting || !currentBoard}

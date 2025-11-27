@@ -43,17 +43,16 @@ export default function ReplyCompose({ messageId }: ReplyComposeProps) {
   const replyToMessage =
     (messageId && emailData?.messages.find((msg) => msg.id === messageId)) || emailData?.latest;
 
-  // Initialize recipients and subject when mode changes
-  useEffect(() => {
-    if (!replyToMessage || !mode || !activeConnection?.email) return;
+  // Compute recipients based on mode
+  const computedRecipients = (() => {
+    if (!replyToMessage || !mode || !activeConnection?.email) {
+      return { to: [], cc: [] };
+    }
 
     const userEmail = activeConnection.email.toLowerCase();
     const senderEmail = replyToMessage.sender.email.toLowerCase();
 
-    // Set subject based on mode
-
     if (mode === 'reply') {
-      // Reply to sender
       const to: string[] = [];
 
       // If the sender is not the current user, add them to the recipients
@@ -64,8 +63,7 @@ export default function ReplyCompose({ messageId }: ReplyComposeProps) {
         to.push(replyToMessage.to[0].email);
       }
 
-      // Initialize email composer with these recipients
-      // Note: The actual initialization happens in the EmailComposer component
+      return { to, cc: [] };
     } else if (mode === 'replyAll') {
       const to: string[] = [];
       const cc: string[] = [];
@@ -91,12 +89,14 @@ export default function ReplyCompose({ messageId }: ReplyComposeProps) {
         }
       });
 
-      // Initialize email composer with these recipients
+      return { to, cc };
     } else if (mode === 'forward') {
       // For forward, we start with empty recipients
-      // Just set the subject and include the original message
+      return { to: [], cc: [] };
     }
-  }, [mode, replyToMessage, activeConnection?.email]);
+
+    return { to: [], cc: [] };
+  })();
 
   const handleSendEmail = async (data: {
     to: string[];
@@ -266,8 +266,8 @@ export default function ReplyCompose({ messageId }: ReplyComposeProps) {
           setActiveReplyId(null);
         }}
         initialMessage={draft?.content ?? latestDraft?.decodedBody}
-        initialTo={ensureEmailArray(draft?.to)}
-        initialCc={ensureEmailArray(draft?.cc)}
+        initialTo={draft?.to ? ensureEmailArray(draft.to) : computedRecipients.to}
+        initialCc={draft?.cc ? ensureEmailArray(draft.cc) : computedRecipients.cc}
         initialBcc={ensureEmailArray(draft?.bcc)}
         initialSubject={draft?.subject}
         autofocus={true}
