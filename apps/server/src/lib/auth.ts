@@ -105,6 +105,12 @@ const generateUsername = (email: string): string => {
 };
 
 const connectionHandlerHook = async (account: Account) => {
+  // Skip credential-based accounts (email/password sign-up)
+  // Only process OAuth social provider accounts
+  if (account.providerId === 'credential') {
+    return;
+  }
+
   if (!account.accessToken || !account.refreshToken) {
     console.error('Missing Access/Refresh Tokens', { account });
     throw new APIError('EXPECTATION_FAILED', {
