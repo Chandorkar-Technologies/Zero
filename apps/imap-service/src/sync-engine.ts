@@ -55,7 +55,7 @@ export class SyncEngine {
                     await client.logout();
                     return;
                 }
-                const currentUidValidity = mailboxStatus.uidValidity ?? 0;
+                const currentUidValidity = Number(mailboxStatus.uidValidity ?? 0);
 
                 // Get saved sync state
                 const syncState = await this.db.getSyncState(conn.id);
