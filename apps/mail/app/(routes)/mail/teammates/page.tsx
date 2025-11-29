@@ -103,9 +103,9 @@ export default function TeammatesPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b p-6">
-        <h1 className="mb-4 text-2xl font-semibold">People</h1>
-        <p className="mb-4 text-muted-foreground">
+      <div className="border-b p-4 sm:p-6">
+        <h1 className="mb-2 sm:mb-4 text-xl sm:text-2xl font-semibold">People</h1>
+        <p className="mb-3 sm:mb-4 text-sm sm:text-base text-muted-foreground">
           People you frequently communicate with from the same organization
         </p>
 
@@ -114,18 +114,18 @@ export default function TeammatesPage() {
           placeholder="Search people..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="max-w-md"
+          className="w-full sm:max-w-md"
         />
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         <div className="mb-4 flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
             {filteredTeammates?.length} people found
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {filteredTeammates?.map((teammate) => (
             <TeammateCard
               key={teammate.email}

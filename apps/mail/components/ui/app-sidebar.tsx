@@ -81,7 +81,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   //       const {
   //         data: { id },
   //       } = await createMeet();
-  //       navigator.clipboard.writeText(`https://meet.0.email/${id}`);
+  //       navigator.clipboard.writeText(`https://meet.nubo.email/${id}`);
   //       toast.success('Meeting linked copied to clipboard');
   //     } catch (error) {
   //       console.error(error);

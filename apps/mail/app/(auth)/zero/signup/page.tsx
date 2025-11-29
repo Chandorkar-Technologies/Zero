@@ -22,8 +22,8 @@ export default function SignupZero() {
   });
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    // Append the @0.email suffix to the username
-    const fullEmail = `${values.email}@0.email`;
+    // Append the @nubo.email suffix to the username
+    const fullEmail = `${values.email}@nubo.email`;
 
     // Use the correct sonner toast API
     toast.success(`Trying to signup with ${fullEmail}`, {
@@ -74,7 +74,7 @@ export default function SignupZero() {
                         className="w-full bg-black pr-16 text-sm text-white placeholder:text-sm"
                       />
                       <span className="bg-popover text-muted-foreground border-input absolute bottom-0 right-0 top-0 flex items-center rounded-r-md border border-l-0 px-3 py-2 text-sm">
-                        @0.email
+                        @nubo.email
                       </span>
                     </div>
                   </FormControl>

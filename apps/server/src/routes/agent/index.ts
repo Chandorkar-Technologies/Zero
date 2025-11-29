@@ -771,10 +771,15 @@ export class ZeroDriver extends DurableObject<ZeroEnv> {
           id: true,
           latestReceivedOn: true,
           latestSender: true,
+          latestSubject: true,
         },
       });
 
-      return threads;
+      // Map latestSubject to subject for compatibility with notifications
+      return threads.map(thread => ({
+        ...thread,
+        subject: thread.latestSubject,
+      }));
     } catch (error) {
       console.error('[getThreadsForPeople] Error querying threads:', error);
       throw error;

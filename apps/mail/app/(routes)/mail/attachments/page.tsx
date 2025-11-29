@@ -236,13 +236,20 @@ export default function AttachmentsPage() {
     );
   }
 
+  // Check if using OAuth connection (attachments not available)
+  const isOAuthConnection = connections?.[0]?.providerId !== 'imap';
+
   if (!attachments || attachments.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4">
+      <div className="flex h-full flex-col items-center justify-center gap-4 px-4">
         <Paperclip className="h-16 w-16 text-muted-foreground" />
-        <div className="text-center">
+        <div className="text-center max-w-md">
           <h2 className="text-2xl font-semibold">No Attachments</h2>
-          <p className="text-muted-foreground">No attachments found in your emails</p>
+          <p className="text-muted-foreground mt-2">
+            {isOAuthConnection
+              ? 'Attachment browsing is currently only available for IMAP connections. For Gmail/Outlook connections, attachments can be viewed within individual emails.'
+              : 'No attachments found in your emails'}
+          </p>
         </div>
       </div>
     );
@@ -250,55 +257,58 @@ export default function AttachmentsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b p-6">
-        <h1 className="mb-4 text-2xl font-semibold">Attachments</h1>
-        <p className="mb-4 text-muted-foreground">
+      <div className="border-b p-4 sm:p-6">
+        <h1 className="mb-2 sm:mb-4 text-xl sm:text-2xl font-semibold">Attachments</h1>
+        <p className="mb-3 sm:mb-4 text-sm sm:text-base text-muted-foreground">
           All email attachments in one place
         </p>
 
         {stats && (
-          <div className="mb-4 flex gap-4 text-sm">
+          <div className="mb-3 sm:mb-4 flex gap-3 sm:gap-4 text-xs sm:text-sm">
             <span>Total: {stats.total}</span>
             <span>Size: {formatFileSize(stats.totalSize)}</span>
           </div>
         )}
 
         <Tabs value={fileType} onValueChange={(v: any) => setFileType(v)}>
-          <TabsList>
-            <TabsTrigger value="all">
+          <TabsList className="flex-wrap h-auto gap-1">
+            <TabsTrigger value="all" className="text-xs sm:text-sm">
               All
-              {stats && <Badge variant="secondary" className="ml-2">{stats.total}</Badge>}
+              {stats && <Badge variant="secondary" className="ml-1 sm:ml-2 text-xs">{stats.total}</Badge>}
             </TabsTrigger>
-            <TabsTrigger value="images">
-              Images
+            <TabsTrigger value="images" className="text-xs sm:text-sm">
+              <span className="hidden sm:inline">Images</span>
+              <span className="sm:hidden">Img</span>
               {stats && stats.images > 0 && (
-                <Badge variant="secondary" className="ml-2">{stats.images}</Badge>
+                <Badge variant="secondary" className="ml-1 sm:ml-2 text-xs">{stats.images}</Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="documents">
-              Documents
+            <TabsTrigger value="documents" className="text-xs sm:text-sm">
+              <span className="hidden sm:inline">Documents</span>
+              <span className="sm:hidden">Docs</span>
               {stats && stats.documents > 0 && (
-                <Badge variant="secondary" className="ml-2">{stats.documents}</Badge>
+                <Badge variant="secondary" className="ml-1 sm:ml-2 text-xs">{stats.documents}</Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="spreadsheets">
-              Spreadsheets
+            <TabsTrigger value="spreadsheets" className="text-xs sm:text-sm">
+              <span className="hidden sm:inline">Spreadsheets</span>
+              <span className="sm:hidden">XLS</span>
               {stats && stats.spreadsheets > 0 && (
-                <Badge variant="secondary" className="ml-2">{stats.spreadsheets}</Badge>
+                <Badge variant="secondary" className="ml-1 sm:ml-2 text-xs">{stats.spreadsheets}</Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="other">
+            <TabsTrigger value="other" className="text-xs sm:text-sm">
               Other
               {stats && stats.other > 0 && (
-                <Badge variant="secondary" className="ml-2">{stats.other}</Badge>
+                <Badge variant="secondary" className="ml-1 sm:ml-2 text-xs">{stats.other}</Badge>
               )}
             </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {attachments.map((attachment) => (
             <div
               key={attachment.id}

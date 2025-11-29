@@ -139,11 +139,11 @@ const sections = [
         <p>Want to learn more about Nubo? Get in touch:</p>
         <div className="flex flex-col space-y-2">
           <a
-            href="mailto:founders@0.email"
+            href="mailto:founders@nubo.email"
             className="inline-flex items-center text-blue-400 hover:text-blue-300"
           >
             <Mail className="mr-2 h-4 w-4" />
-            founders@0.email
+            founders@nubo.email
           </a>
           <a
             href="https://github.com/Mail-0/Zero"

@@ -1,8 +1,9 @@
 import { streamText, tool, type DataStreamWriter, type ToolSet } from 'ai';
-import { perplexity } from '@ai-sdk/perplexity';
+import { createPerplexity } from '@ai-sdk/perplexity';
 
 import { getZeroAgent } from '../../lib/server-utils';
 import { Tools } from '../../types';
+import { env } from '../../env';
 import { z } from 'zod';
 
 /**
@@ -43,6 +44,9 @@ export class ToolOrchestrator {
         }),
         execute: async ({ query }, { toolCallId }) => {
           try {
+            const perplexity = createPerplexity({
+              apiKey: env.PERPLEXITY_API_KEY,
+            });
             const response = streamText({
               model: perplexity('sonar'),
               messages: [

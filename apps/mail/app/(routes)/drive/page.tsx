@@ -61,7 +61,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
 type ViewMode = 'grid' | 'list';
-type FilterMode = 'all' | 'starred' | 'trashed';
+type FilterMode = 'all' | 'starred' | 'trashed' | 'shared';
 
 // File icon based on category
 function getFileIcon(category: string, className?: string) {
@@ -222,6 +222,13 @@ export default function DrivePage() {
   );
 
   const { data: stats } = useQuery(trpc.drive.getStorageStats.queryOptions());
+
+  // Query for shared files (only when filter is 'shared')
+  const { data: sharedWithMe, isLoading: sharedLoading } = useQuery(
+    trpc.drive.getSharedWithMe.queryOptions(undefined, {
+      enabled: filter === 'shared',
+    }),
+  );
 
   // Mutations
   const createFolderMutation = useMutation(trpc.drive.createFolder.mutationOptions());
@@ -987,6 +994,14 @@ export default function DrivePage() {
                 <Trash2 className="mr-1 h-4 w-4" />
                 Trash
               </Button>
+              <Button
+                variant={filter === 'shared' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setFilter('shared')}
+              >
+                <Users className="mr-1 h-4 w-4" />
+                Shared
+              </Button>
             </div>
             <div className="flex rounded-lg border">
               <Button
@@ -1060,7 +1075,148 @@ export default function DrivePage() {
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-4">
-        {isLoading ? (
+        {/* Shared with Me View */}
+        {filter === 'shared' ? (
+          sharedLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-muted-foreground">Loading shared files...</div>
+            </div>
+          ) : !sharedWithMe || sharedWithMe.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <Users className="mb-4 h-16 w-16 text-muted-foreground" />
+              <h3 className="text-lg font-semibold">No shared files</h3>
+              <p className="text-muted-foreground mb-4">
+                Files shared with you will appear here
+              </p>
+            </div>
+          ) : viewMode === 'grid' ? (
+            <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+              {sharedWithMe.map((item) => {
+                const isPdf = item.file?.mimeType === 'application/pdf';
+                const isImage = item.file?.mimeType?.startsWith('image/') ?? false;
+                const isVideo = item.file?.mimeType?.startsWith('video/') ?? false;
+                const isEditable = item.file?.mimeType?.includes('document') ||
+                  item.file?.mimeType?.includes('spreadsheet') ||
+                  item.file?.mimeType?.includes('presentation') || false;
+                const category = isPdf ? 'pdf' : isImage ? 'image' : isVideo ? 'video' :
+                  item.file?.mimeType?.includes('document') ? 'document' :
+                  item.file?.mimeType?.includes('spreadsheet') ? 'spreadsheet' :
+                  item.file?.mimeType?.includes('presentation') ? 'presentation' : 'other';
+
+                return (
+                  <div
+                    key={item.share.id}
+                    className="group relative flex flex-col items-center rounded-lg border p-4 hover:bg-accent cursor-pointer"
+                    onDoubleClick={() => {
+                      if (item.file) {
+                        if (isPdf || isImage || isVideo) {
+                          handlePreview(item.file.id, item.file.name, item.file.mimeType);
+                        } else if (isEditable && item.share.accessLevel === 'edit') {
+                          handleOpenEditor(item.file.id);
+                        } else {
+                          handleDownload(item.file.id, item.file.name);
+                        }
+                      } else if (item.folder) {
+                        handleNavigateToFolder(item.folder.id);
+                      }
+                    }}
+                  >
+                    {item.file ? (
+                      <>
+                        {getFileIcon(category)}
+                        <span className="mt-2 text-sm font-medium text-center truncate w-full">
+                          {item.file.name}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatSize(item.file.size)}
+                        </span>
+                      </>
+                    ) : item.folder ? (
+                      <>
+                        <Folder className="h-12 w-12 text-blue-500" />
+                        <span className="mt-2 text-sm font-medium text-center truncate w-full">
+                          {item.folder.name}
+                        </span>
+                      </>
+                    ) : null}
+                    <span className="text-xs text-muted-foreground mt-1">
+                      from {item.owner?.name || 'Unknown'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-lg border">
+              <table className="w-full">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-sm font-medium">Name</th>
+                    <th className="px-4 py-2 text-left text-sm font-medium">Owner</th>
+                    <th className="px-4 py-2 text-left text-sm font-medium">Size</th>
+                    <th className="px-4 py-2 text-left text-sm font-medium">Shared On</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sharedWithMe.map((item) => {
+                    const isPdf = item.file?.mimeType === 'application/pdf';
+                    const isImage = item.file?.mimeType?.startsWith('image/') ?? false;
+                    const isVideo = item.file?.mimeType?.startsWith('video/') ?? false;
+                    const isEditable = item.file?.mimeType?.includes('document') ||
+                      item.file?.mimeType?.includes('spreadsheet') ||
+                      item.file?.mimeType?.includes('presentation') || false;
+                    const category = isPdf ? 'pdf' : isImage ? 'image' : isVideo ? 'video' :
+                      item.file?.mimeType?.includes('document') ? 'document' :
+                      item.file?.mimeType?.includes('spreadsheet') ? 'spreadsheet' :
+                      item.file?.mimeType?.includes('presentation') ? 'presentation' : 'other';
+
+                    return (
+                      <tr
+                        key={item.share.id}
+                        className="border-t hover:bg-accent cursor-pointer"
+                        onDoubleClick={() => {
+                          if (item.file) {
+                            if (isPdf || isImage || isVideo) {
+                              handlePreview(item.file.id, item.file.name, item.file.mimeType);
+                            } else if (isEditable && item.share.accessLevel === 'edit') {
+                              handleOpenEditor(item.file.id);
+                            } else {
+                              handleDownload(item.file.id, item.file.name);
+                            }
+                          } else if (item.folder) {
+                            handleNavigateToFolder(item.folder.id);
+                          }
+                        }}
+                      >
+                        <td className="px-4 py-2">
+                          <div className="flex items-center gap-2">
+                            {item.file ? (
+                              getFileIcon(category, 'h-5 w-5')
+                            ) : (
+                              <Folder className="h-5 w-5 text-blue-500" />
+                            )}
+                            <span className="font-medium">
+                              {item.file?.name || item.folder?.name}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-sm text-muted-foreground">
+                          {item.owner?.name || 'Unknown'}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-muted-foreground">
+                          {item.file ? formatSize(item.file.size) : '—'}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-muted-foreground">
+                          {format(new Date(item.share.createdAt), 'MMM d, yyyy')}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : isLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="text-muted-foreground">Loading...</div>
           </div>

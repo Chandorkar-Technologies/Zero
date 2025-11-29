@@ -26,7 +26,7 @@ import { userSettingsSchema } from '@zero/server/schemas';
 import { locales } from '@/project.inlang/settings.json';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useTRPC } from '@/providers/query-provider';
+import { useTRPC, trpcClient } from '@/providers/query-provider';
 import { getBrowserTimezone } from '@/lib/timezones';
 
 import { useSettings } from '@/hooks/use-settings';
@@ -322,20 +322,15 @@ export default function GeneralPage() {
   // Username state and handlers
   const [newUsername, setNewUsername] = useState('');
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
-  const [_checkingUsername, setCheckingUsername] = useState(false);
-  const [_savingUsername, setSavingUsername] = useState(false);
+  const [checkingUsername, setCheckingUsername] = useState(false);
+  const [savingUsername, setSavingUsername] = useState(false);
 
   // Fetch current username - using trpc directly since the endpoints are in drive router
-  const { data: usernameData, refetch: refetchUsername, isLoading: isUsernameLoading } = useQuery({
-    queryKey: ['username'],
-    queryFn: async () => {
-      try {
-        return await trpc.drive.getMyUsername.query();
-      } catch {
-        return { username: null };
-      }
-    },
-  });
+  const { data: usernameData, refetch: refetchUsername, isLoading: isUsernameLoading } = useQuery(
+    trpc.drive.getMyUsername.queryOptions(void 0, {
+      retry: false,
+    }),
+  );
 
   // Set initial username value when data loads
   useEffect(() => {
@@ -358,7 +353,7 @@ export default function GeneralPage() {
       }
       setCheckingUsername(true);
       try {
-        const result = await trpc.drive.checkUsername.query({ username: newUsername });
+        const result = await trpcClient.drive.checkUsername.query({ username: newUsername });
         setUsernameAvailable(result.available);
       } catch {
         setUsernameAvailable(false);
@@ -368,13 +363,13 @@ export default function GeneralPage() {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [newUsername, usernameData?.username, trpc.drive.checkUsername]);
+  }, [newUsername, usernameData?.username]);
 
-  const _handleSaveUsername = async () => {
+  const handleSaveUsername = async () => {
     if (!newUsername || newUsername.length < 3 || !usernameAvailable) return;
     setSavingUsername(true);
     try {
-      await trpc.drive.setUsername.mutate({ username: newUsername });
+      await trpcClient.drive.setUsername.mutate({ username: newUsername });
       await refetchUsername();
       toast.success('Username updated successfully');
     } catch (error: unknown) {
@@ -438,10 +433,17 @@ export default function GeneralPage() {
         </Form>
       </SettingsCard>
 
-      {/* Username Settings Card - Display only, username is set once */}
+      {/* Username Settings Card */}
       <SettingsCard
         title="Nubo Username"
         description="Your unique Nubo username for sharing and collaboration."
+        footer={
+          !usernameData?.username && newUsername && usernameAvailable ? (
+            <Button onClick={handleSaveUsername} disabled={savingUsername}>
+              {savingUsername ? 'Saving...' : 'Set Username'}
+            </Button>
+          ) : null
+        }
       >
         <div className="space-y-4">
           {isUsernameLoading ? (
@@ -459,10 +461,43 @@ export default function GeneralPage() {
               </p>
             </div>
           ) : (
-            <div className="rounded-lg bg-muted/50 p-4">
+            <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                No username set yet. Your Nubo username will appear here once configured.
+                Set your unique Nubo username. This will be your permanent address for sharing.
               </p>
+              <div className="flex flex-col gap-2 max-w-md">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={newUsername}
+                      onChange={(e) => setNewUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                      placeholder="username"
+                      className="w-full pl-9 pr-24 h-10 rounded-md border border-input bg-background text-sm"
+                      maxLength={30}
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                      @nubo.email
+                    </span>
+                  </div>
+                </div>
+                {newUsername && newUsername.length >= 3 && (
+                  <p className={cn(
+                    "text-xs",
+                    usernameAvailable === true ? "text-green-600" : usernameAvailable === false ? "text-red-600" : "text-muted-foreground"
+                  )}>
+                    {checkingUsername ? "Checking availability..." :
+                     usernameAvailable === true ? "Username is available!" :
+                     usernameAvailable === false ? "Username is not available" : ""}
+                  </p>
+                )}
+                {newUsername && newUsername.length < 3 && (
+                  <p className="text-xs text-muted-foreground">
+                    Username must be at least 3 characters
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </div>

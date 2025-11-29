@@ -2,7 +2,7 @@ import { getCurrentDateContext, GmailSearchAssistantSystemPrompt } from '../../l
 import { getThread, getZeroAgent } from '../../lib/server-utils';
 import type { IGetThreadResponse } from '../../lib/driver/types';
 import { composeEmail } from '../../trpc/routes/ai/compose';
-import { perplexity } from '@ai-sdk/perplexity';
+import { createPerplexity } from '@ai-sdk/perplexity';
 import { colors } from '../../lib/prompts';
 import { openai } from '../../lib/openai';
 import { generateText, tool } from 'ai';
@@ -460,6 +460,9 @@ export const webSearch = () =>
     }),
     execute: async ({ query }) => {
       try {
+        const perplexity = createPerplexity({
+          apiKey: env.PERPLEXITY_API_KEY,
+        });
         const response = await generateText({
           model: perplexity('sonar'),
           messages: [

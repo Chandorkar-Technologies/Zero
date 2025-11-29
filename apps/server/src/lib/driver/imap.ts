@@ -40,19 +40,23 @@ export class ImapMailManager implements MailManager {
         labelIds?: string[];
         pageToken?: string;
     }): Promise<IGetThreadsResponse> {
-        const { maxResults = 50, pageToken, query } = params;
+        const { folder, maxResults = 50, pageToken, query } = params;
         const connectionId = (this.config as any).connectionId;
 
         if (!connectionId) {
             throw new Error('Connection ID not found in config');
         }
 
-        console.log(`[ImapMailManager] Listing threads for ${connectionId}`);
+        console.log(`[ImapMailManager] Listing threads for ${connectionId}, folder: ${folder}`);
+
+        // IMAP drafts are not stored in the database - return empty list
+        if (folder === 'draft') {
+            console.log(`[ImapMailManager] Draft folder requested - IMAP drafts not supported, returning empty`);
+            return { threads: [], nextPageToken: null };
+        }
 
         // Query Postgres for emails
         // Group by threadId to simulate threads
-        // For now, just fetch emails and assume 1 email = 1 thread if we don't have thread grouping logic in DB yet
-        // Actually email table has threadId.
 
         const conditions = [eq(email.connectionId, connectionId)];
 
@@ -64,12 +68,39 @@ export class ImapMailManager implements MailManager {
         // pageToken can be offset for simplicity
         const offset = pageToken ? parseInt(pageToken, 10) : 0;
 
-        const emails = await this.db.query.email.findMany({
+        // Fetch emails with folder filtering done after retrieval
+        // Labels are stored in jsonb, so we filter in memory
+        let allEmails = await this.db.query.email.findMany({
             where: and(...conditions),
             orderBy: [desc(email.internalDate)],
-            limit: maxResults,
+            // Fetch more to account for filtering
+            limit: maxResults * 3,
             offset: offset,
         });
+
+        // Map folder to expected labels
+        const folderToLabel: Record<string, string> = {
+            'inbox': 'INBOX',
+            'sent': 'SENT',
+            'spam': 'SPAM',
+            'bin': 'TRASH',
+            'archive': 'ARCHIVE',
+            'snoozed': 'SNOOZED',
+        };
+
+        const expectedLabel = folderToLabel[folder];
+
+        // Filter emails by folder label
+        if (expectedLabel) {
+            console.log(`[ImapMailManager] Filtering by label: ${expectedLabel}`);
+            allEmails = allEmails.filter(e => {
+                const labels = (e.labels as string[]) || [];
+                return labels.includes(expectedLabel);
+            });
+        }
+
+        // Take only maxResults after filtering
+        const emails = allEmails.slice(0, maxResults);
 
         const threads: { id: string; historyId: string | null; $raw?: unknown }[] = emails.map(e => ({
             id: e.threadId,

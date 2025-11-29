@@ -166,12 +166,8 @@ export const notificationsRouter = router({
       const executionCtx = getContext<HonoContext>().executionCtx;
       const { stub: agent } = await getZeroAgent(connectionId, executionCtx);
 
-      // Query threads from agent's database
-      const threads = await agent.db.query.threads.findMany({
-        where: (thread: any, { eq: eqFn }: any) => eqFn(thread.providerId, connectionId),
-        orderBy: (thread: any, { desc: descFn }: any) => descFn(thread.latestReceivedOn),
-        limit: 200,
-      });
+      // Call the exposed RPC method on the Durable Object stub
+      const threads = await agent.getThreadsForPeople({ limit: 200 });
 
       const notifications: Notification[] = [];
       const processedThreads = new Set<string>();
@@ -278,12 +274,8 @@ export const notificationsRouter = router({
       const executionCtx = getContext<HonoContext>().executionCtx;
       const { stub: agent } = await getZeroAgent(connectionId, executionCtx);
 
-      // Query threads from agent's database
-      const threads = await agent.db.query.threads.findMany({
-        where: (thread: any, { eq: eqFn }: any) => eqFn(thread.providerId, connectionId),
-        orderBy: (thread: any, { desc: descFn }: any) => descFn(thread.latestReceivedOn),
-        limit: 200,
-      });
+      // Call the exposed RPC method on the Durable Object stub
+      const threads = await agent.getThreadsForPeople({ limit: 200 });
 
       const processedThreads = new Set<string>();
 

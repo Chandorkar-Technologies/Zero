@@ -1,11 +1,15 @@
 import { activeDriverProcedure } from '../../trpc';
-import { perplexity } from '@ai-sdk/perplexity';
+import { createPerplexity } from '@ai-sdk/perplexity';
 import { generateText } from 'ai';
+import { env } from '../../../env';
 import { z } from 'zod';
 
 export const webSearch = activeDriverProcedure
   .input(z.object({ query: z.string() }))
   .mutation(async ({ input }) => {
+    const perplexity = createPerplexity({
+      apiKey: env.PERPLEXITY_API_KEY,
+    });
     const result = await generateText({
       model: perplexity('sonar'),
       system:

@@ -14,6 +14,7 @@ export default [
     route('/contributors', '(full-width)/contributors.tsx'),
     route('/hr', '(full-width)/hr.tsx'),
     route('/meet/:meetingId', '(full-width)/meet/[meetingId]/page.tsx'),
+    route('/drive/shared/:token', '(routes)/drive/shared/[token]/page.tsx'),
   ]),
 
   route('/login', '(auth)/login/page.tsx'),

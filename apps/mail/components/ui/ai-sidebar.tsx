@@ -386,7 +386,10 @@ function AISidebar({ className }: AISidebarProps) {
     agent: 'ZeroAgent',
     name: activeConnection?.id ? String(activeConnection.id) : 'general',
     host: `${import.meta.env.VITE_PUBLIC_BACKEND_URL}`,
-    onError: (e) => console.log(e),
+    onError: (e) => {
+      console.error('[AI Agent] Connection error:', e);
+      toast.error('Unable to connect to AI assistant. Please try again.');
+    },
     onMessage,
   });
 

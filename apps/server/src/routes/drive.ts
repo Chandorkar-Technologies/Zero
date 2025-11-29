@@ -250,3 +250,174 @@ driveApiRouter.options('/file/:fileId/content', () => {
     },
   });
 });
+
+// Public endpoint to get shared file/folder info by share token (no auth required)
+driveApiRouter.get('/shared/:token', async (c) => {
+  const token = c.req.param('token');
+
+  const { db, conn } = createDb(env.HYPERDRIVE.connectionString);
+
+  try {
+    // Import driveShare table
+    const { driveShare } = await import('../db/schema');
+
+    // Find the share by token
+    const share = await db.query.driveShare.findFirst({
+      where: eq(driveShare.shareToken, token),
+      with: {
+        file: true,
+        folder: true,
+        owner: {
+          columns: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!share) {
+      return c.json({ error: 'Share not found or has expired' }, 404);
+    }
+
+    // Check if share has expired
+    if (share.expiresAt && new Date(share.expiresAt) < new Date()) {
+      return c.json({ error: 'This share link has expired' }, 410);
+    }
+
+    // Return share info
+    return c.json({
+      id: share.id,
+      type: share.fileId ? 'file' : 'folder',
+      accessLevel: share.accessLevel,
+      file: share.file ? {
+        id: share.file.id,
+        name: share.file.name,
+        mimeType: share.file.mimeType,
+        size: share.file.size,
+      } : null,
+      folder: share.folder ? {
+        id: share.folder.id,
+        name: share.folder.name,
+      } : null,
+      owner: share.owner ? {
+        name: share.owner.name,
+      } : null,
+      createdAt: share.createdAt,
+      expiresAt: share.expiresAt,
+    });
+  } catch (error) {
+    console.error('[Drive Share] Error fetching share:', error);
+    return c.json({ error: 'Failed to load shared item' }, 500);
+  } finally {
+    await conn.end();
+  }
+});
+
+// Public endpoint to download shared file by share token (no auth required)
+driveApiRouter.get('/shared/:token/download', async (c) => {
+  const token = c.req.param('token');
+
+  const { db, conn } = createDb(env.HYPERDRIVE.connectionString);
+
+  try {
+    const { driveShare } = await import('../db/schema');
+
+    // Find the share by token
+    const share = await db.query.driveShare.findFirst({
+      where: eq(driveShare.shareToken, token),
+      with: {
+        file: true,
+      },
+    });
+
+    if (!share) {
+      return c.json({ error: 'Share not found' }, 404);
+    }
+
+    // Check if share has expired
+    if (share.expiresAt && new Date(share.expiresAt) < new Date()) {
+      return c.json({ error: 'This share link has expired' }, 410);
+    }
+
+    // Only file shares can be downloaded
+    if (!share.file) {
+      return c.json({ error: 'Only files can be downloaded' }, 400);
+    }
+
+    const file = share.file;
+    const bucket = env.DRIVE_BUCKET;
+    const object = await bucket.get(file.r2Key);
+
+    if (!object) {
+      return c.json({ error: 'File not found in storage' }, 404);
+    }
+
+    const headers = new Headers();
+    headers.set('Content-Type', file.mimeType);
+    headers.set('Content-Disposition', `attachment; filename="${encodeURIComponent(file.name)}"`);
+    headers.set('Content-Length', file.size.toString());
+
+    return new Response(object.body, { headers });
+  } catch (error) {
+    console.error('[Drive Share] Error downloading shared file:', error);
+    return c.json({ error: 'Failed to download file' }, 500);
+  } finally {
+    await conn.end();
+  }
+});
+
+// Public endpoint to preview shared file (for images, PDFs, videos)
+driveApiRouter.get('/shared/:token/preview', async (c) => {
+  const token = c.req.param('token');
+
+  const { db, conn } = createDb(env.HYPERDRIVE.connectionString);
+
+  try {
+    const { driveShare } = await import('../db/schema');
+
+    // Find the share by token
+    const share = await db.query.driveShare.findFirst({
+      where: eq(driveShare.shareToken, token),
+      with: {
+        file: true,
+      },
+    });
+
+    if (!share) {
+      return c.json({ error: 'Share not found' }, 404);
+    }
+
+    // Check if share has expired
+    if (share.expiresAt && new Date(share.expiresAt) < new Date()) {
+      return c.json({ error: 'This share link has expired' }, 410);
+    }
+
+    if (!share.file) {
+      return c.json({ error: 'Only files can be previewed' }, 400);
+    }
+
+    const file = share.file;
+    const bucket = env.DRIVE_BUCKET;
+    const object = await bucket.get(file.r2Key);
+
+    if (!object) {
+      return c.json({ error: 'File not found in storage' }, 404);
+    }
+
+    const headers = new Headers();
+    headers.set('Content-Type', file.mimeType);
+    headers.set('Content-Length', file.size.toString());
+    // Allow inline display for preview
+    headers.set('Content-Disposition', `inline; filename="${encodeURIComponent(file.name)}"`);
+    // CORS for cross-origin previews
+    headers.set('Access-Control-Allow-Origin', '*');
+
+    return new Response(object.body, { headers });
+  } catch (error) {
+    console.error('[Drive Share] Error previewing shared file:', error);
+    return c.json({ error: 'Failed to preview file' }, 500);
+  } finally {
+    await conn.end();
+  }
+});

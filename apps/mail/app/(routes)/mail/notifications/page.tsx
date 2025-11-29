@@ -123,42 +123,45 @@ export default function NotificationsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b p-6">
-        <h1 className="mb-4 text-2xl font-semibold">Notifications</h1>
-        <p className="mb-4 text-muted-foreground">
+      <div className="border-b p-4 sm:p-6">
+        <h1 className="mb-2 sm:mb-4 text-xl sm:text-2xl font-semibold">Notifications</h1>
+        <p className="mb-3 sm:mb-4 text-sm sm:text-base text-muted-foreground">
           Mentions, important emails, and action items
         </p>
 
         <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)}>
-          <TabsList>
-            <TabsTrigger value="all">
+          <TabsList className="flex-wrap h-auto gap-1">
+            <TabsTrigger value="all" className="text-xs sm:text-sm">
               All
-              {counts && <Badge variant="secondary" className="ml-2">{counts.total}</Badge>}
+              {counts && <Badge variant="secondary" className="ml-1 sm:ml-2 text-xs">{counts.total}</Badge>}
             </TabsTrigger>
-            <TabsTrigger value="mention">
-              Mentions
+            <TabsTrigger value="mention" className="text-xs sm:text-sm">
+              <span className="hidden sm:inline">Mentions</span>
+              <span className="sm:hidden">@</span>
               {counts && counts.mentions > 0 && (
-                <Badge variant="secondary" className="ml-2">{counts.mentions}</Badge>
+                <Badge variant="secondary" className="ml-1 sm:ml-2 text-xs">{counts.mentions}</Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="important">
-              Important
+            <TabsTrigger value="important" className="text-xs sm:text-sm">
+              <span className="hidden sm:inline">Important</span>
+              <span className="sm:hidden">!</span>
               {counts && counts.important > 0 && (
-                <Badge variant="secondary" className="ml-2">{counts.important}</Badge>
+                <Badge variant="secondary" className="ml-1 sm:ml-2 text-xs">{counts.important}</Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="action_item">
-              Action Items
+            <TabsTrigger value="action_item" className="text-xs sm:text-sm">
+              <span className="hidden sm:inline">Action Items</span>
+              <span className="sm:hidden">Tasks</span>
               {counts && counts.actionItems > 0 && (
-                <Badge variant="secondary" className="ml-2">{counts.actionItems}</Badge>
+                <Badge variant="secondary" className="ml-1 sm:ml-2 text-xs">{counts.actionItems}</Badge>
               )}
             </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="space-y-2">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="space-y-2 sm:space-y-3">
           {filteredNotifications && filteredNotifications.length > 0 ? (
             filteredNotifications.map((notification) => (
               <div

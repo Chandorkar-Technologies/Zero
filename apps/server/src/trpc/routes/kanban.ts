@@ -1,7 +1,8 @@
 import { privateProcedure, router } from '../trpc';
-import { getZeroDB } from '../../lib/server-utils';
+import { getZeroDB, getThread } from '../../lib/server-utils';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { connection } from '../../db/schema';
 
 export const kanbanRouter = router({
   // Board operations
@@ -153,6 +154,20 @@ export const kanbanRouter = router({
 
       const columns = await db.getKanbanColumns(boardId);
 
+      // Get connection info to determine provider type
+      const { env } = await import('../../env');
+      const { createDb } = await import('../../db');
+      const { eq } = await import('drizzle-orm');
+      const { db: dbInstance } = createDb(env.HYPERDRIVE.connectionString);
+
+      const [connectionInfo] = await dbInstance
+        .select({ providerId: connection.providerId })
+        .from(connection)
+        .where(eq(connection.id, board.connectionId))
+        .limit(1);
+
+      const isImapConnection = connectionInfo?.providerId === 'imap';
+
       // Get emails for each column with metadata
       const columnsWithEmails = await Promise.all(
         columns.map(async (column) => {
@@ -162,38 +177,47 @@ export const kanbanRouter = router({
           const emailsWithMetadata = await Promise.all(
             emails.map(async (email) => {
               try {
-                // Fetch email metadata directly from database using createDb
-                await import('../../db');
-                const { email: emailSchema } = await import('../../db/schema');
-                const { and, eq } = await import('drizzle-orm');
-                const { env } = await import('../../env');
-                const { createDb } = await import('../../db');
+                if (isImapConnection) {
+                  // For IMAP connections, fetch from PostgreSQL database
+                  const { email: emailSchema } = await import('../../db/schema');
+                  const { and, eq: eqOp } = await import('drizzle-orm');
 
-                const { db: dbInstance } = createDb(env.HYPERDRIVE.connectionString);
+                  const dbEmails = await dbInstance.query.email.findMany({
+                    where: and(
+                      eqOp(emailSchema.threadId, email.threadId),
+                      eqOp(emailSchema.connectionId, email.connectionId)
+                    ),
+                    limit: 1,
+                    columns: {
+                      subject: true,
+                      snippet: true,
+                      from: true,
+                    },
+                  });
 
-                const emails = await dbInstance.query.email.findMany({
-                  where: and(
-                    eq(emailSchema.threadId, email.threadId),
-                    eq(emailSchema.connectionId, email.connectionId)
-                  ),
-                  limit: 1,
-                  columns: {
-                    subject: true,
-                    snippet: true,
-                    from: true,
-                  },
-                });
+                  const emailMeta = dbEmails[0];
+                  const from = emailMeta?.from as { name?: string; address: string } | undefined;
 
-                const emailMeta = emails[0];
-                const from = emailMeta?.from as { name?: string; address: string } | undefined;
+                  return {
+                    ...email,
+                    subject: emailMeta?.subject || 'No Subject',
+                    snippet: emailMeta?.snippet || '',
+                    senderName: from?.name || '',
+                    senderEmail: from?.address || '',
+                  };
+                } else {
+                  // For OAuth connections (Google/Outlook), fetch from Durable Object
+                  const threadResult = await getThread(email.connectionId, email.threadId);
+                  const latestMessage = threadResult.result?.latest;
 
-                return {
-                  ...email,
-                  subject: emailMeta?.subject || 'No Subject',
-                  snippet: emailMeta?.snippet || '',
-                  senderName: from?.name || '',
-                  senderEmail: from?.address || '',
-                };
+                  return {
+                    ...email,
+                    subject: latestMessage?.subject || 'No Subject',
+                    snippet: latestMessage?.snippet || '',
+                    senderName: latestMessage?.sender?.name || '',
+                    senderEmail: latestMessage?.sender?.email || '',
+                  };
+                }
               } catch (error) {
                 console.error('[getBoardWithColumns] Error fetching email metadata:', error);
                 return {

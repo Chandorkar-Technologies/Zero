@@ -176,12 +176,8 @@ export const peopleRouter = router({
         const executionCtx = getContext<HonoContext>().executionCtx;
         const { stub: agent } = await getZeroAgent(connectionId, executionCtx);
 
-        // Query threads from agent's database
-        const threads = await agent.db.query.threads.findMany({
-          where: (thread: any, { eq: eqFn }: any) => eqFn(thread.providerId, connectionId),
-          orderBy: (thread: any, { desc: descFn }: any) => descFn(thread.latestReceivedOn),
-          limit: 500,
-        });
+        // Call the exposed RPC method on the Durable Object stub
+        const threads = await agent.getThreadsForPeople({ limit: 500 });
 
         console.log('[getPeople] Found threads from agent:', threads.length);
 
@@ -300,12 +296,8 @@ export const peopleRouter = router({
       const executionCtx = getContext<HonoContext>().executionCtx;
       const { stub: agent } = await getZeroAgent(connectionId, executionCtx);
 
-      // Query threads from agent's database
-      const threads = await agent.db.query.threads.findMany({
-        where: (thread: any, { eq: eqFn }: any) => eqFn(thread.providerId, connectionId),
-        orderBy: (thread: any, { desc: descFn }: any) => descFn(thread.latestReceivedOn),
-        limit: 500,
-      });
+      // Call the exposed RPC method on the Durable Object stub
+      const threads = await agent.getThreadsForPeople({ limit: 500 });
 
       console.log('[getPersonThreads] Found threads from agent:', threads.length);
 

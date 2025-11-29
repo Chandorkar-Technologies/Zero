@@ -42,8 +42,26 @@ export interface IConfig {
   };
 }
 
+export type ImapSmtpConfig = {
+  imap?: {
+    host: string;
+    port: number;
+    secure: boolean;
+  };
+  smtp?: {
+    host: string;
+    port: number;
+    secure: boolean;
+  };
+  auth?: {
+    user: string;
+    pass: string;
+  };
+};
+
 export type ManagerConfig = {
   connectionId?: string; // Added for IMAP
+  imapConfig?: ImapSmtpConfig; // IMAP/SMTP configuration
   auth: {
     userId: string;
     // accountId: string;

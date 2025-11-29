@@ -1,6 +1,7 @@
 'use client';
 
-import { createContext, useContext, useEffect, useCallback, type PropsWithChildren } from 'react';
+import { createContext, useContext, useEffect, useCallback, useState, type PropsWithChildren } from 'react';
+import { toast } from 'sonner';
 
 declare global {
   interface Window {
@@ -25,6 +26,7 @@ interface ChatwootContextType {
   openChat: () => void;
   closeChat: () => void;
   toggleChat: () => void;
+  isReady: boolean;
 }
 
 const ChatwootContext = createContext<ChatwootContextType | null>(null);
@@ -32,7 +34,12 @@ const ChatwootContext = createContext<ChatwootContextType | null>(null);
 const CHATWOOT_TOKEN = 'uqDkxPUGDCg3pAaAx9S2CmS6';
 const CHATWOOT_BASE_URL = 'https://app.chatwoot.com';
 
+const SUPPORT_EMAIL = 'support@nubo.email';
+
 export function ChatwootProvider({ children }: PropsWithChildren) {
+  const [isReady, setIsReady] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+
   useEffect(() => {
     // Set chatwoot settings before loading the script
     window.chatwootSettings = {
@@ -41,9 +48,23 @@ export function ChatwootProvider({ children }: PropsWithChildren) {
       type: 'standard',
     };
 
+    // Listen for chatwoot ready event
+    const handleChatwootReady = () => {
+      console.log('[Chatwoot] Widget is ready');
+      setIsReady(true);
+    };
+
+    window.addEventListener('chatwoot:ready', handleChatwootReady);
+
     // Check if script is already loaded
     if (document.getElementById('chatwoot-script')) {
-      return;
+      // If script exists and $chatwoot is available, it's ready
+      if (window.$chatwoot) {
+        setIsReady(true);
+      }
+      return () => {
+        window.removeEventListener('chatwoot:ready', handleChatwootReady);
+      };
     }
 
     // Create and load the Chatwoot script
@@ -54,30 +75,78 @@ export function ChatwootProvider({ children }: PropsWithChildren) {
     script.defer = true;
 
     script.onload = () => {
+      console.log('[Chatwoot] SDK script loaded');
       if (window.chatwootSDK) {
         window.chatwootSDK.run({
           websiteToken: CHATWOOT_TOKEN,
           baseUrl: CHATWOOT_BASE_URL,
         });
+        console.log('[Chatwoot] SDK initialized');
       }
+    };
+
+    script.onerror = (error) => {
+      console.error('[Chatwoot] Failed to load SDK:', error);
+      setLoadError(true);
     };
 
     document.body.appendChild(script);
 
     return () => {
-      // Cleanup on unmount (optional, usually not needed for chat widgets)
-      const existingScript = document.getElementById('chatwoot-script');
-      if (existingScript) {
-        existingScript.remove();
-      }
+      window.removeEventListener('chatwoot:ready', handleChatwootReady);
     };
   }, []);
 
   const openChat = useCallback(() => {
-    if (window.$chatwoot) {
-      window.$chatwoot.toggle('open');
+    console.log('[Chatwoot] openChat called, isReady:', isReady, '$chatwoot:', !!window.$chatwoot, 'loadError:', loadError);
+
+    // If we know it failed to load, show fallback immediately
+    if (loadError) {
+      toast.info('Live chat is unavailable', {
+        description: `Please email us at ${SUPPORT_EMAIL}`,
+        action: {
+          label: 'Send Email',
+          onClick: () => window.open(`mailto:${SUPPORT_EMAIL}?subject=Support%20Request`, '_blank'),
+        },
+      });
+      return;
     }
-  }, []);
+
+    if (window.$chatwoot) {
+      console.log('[Chatwoot] Opening chat widget');
+      window.$chatwoot.toggle('open');
+    } else {
+      console.warn('[Chatwoot] $chatwoot not available yet, retrying...');
+      toast.loading('Connecting to support...', { id: 'chatwoot-loading' });
+
+      // Retry with increasing delays
+      const tryOpen = (attempt: number) => {
+        if (attempt > 5) {
+          console.error('[Chatwoot] Failed to open after 5 attempts');
+          toast.dismiss('chatwoot-loading');
+          toast.info('Live chat is unavailable', {
+            description: `Please email us at ${SUPPORT_EMAIL}`,
+            action: {
+              label: 'Send Email',
+              onClick: () => window.open(`mailto:${SUPPORT_EMAIL}?subject=Support%20Request`, '_blank'),
+            },
+          });
+          setLoadError(true);
+          return;
+        }
+        setTimeout(() => {
+          if (window.$chatwoot) {
+            console.log('[Chatwoot] Opening chat widget (attempt', attempt, ')');
+            toast.dismiss('chatwoot-loading');
+            window.$chatwoot.toggle('open');
+          } else {
+            tryOpen(attempt + 1);
+          }
+        }, 500 * attempt);
+      };
+      tryOpen(1);
+    }
+  }, [isReady, loadError]);
 
   const closeChat = useCallback(() => {
     if (window.$chatwoot) {
@@ -92,7 +161,7 @@ export function ChatwootProvider({ children }: PropsWithChildren) {
   }, []);
 
   return (
-    <ChatwootContext.Provider value={{ openChat, closeChat, toggleChat }}>
+    <ChatwootContext.Provider value={{ openChat, closeChat, toggleChat, isReady }}>
       {children}
     </ChatwootContext.Provider>
   );
