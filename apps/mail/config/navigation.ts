@@ -15,7 +15,7 @@ import {
   LockIcon,
   Clock,
 } from '@/components/icons/icons';
-import { MessageSquareIcon, Video, HardDrive, KanbanSquare, UserCircle, Bell, Paperclip } from 'lucide-react';
+import { MessageSquareIcon, Video, HardDrive, KanbanSquare, UserCircle, Bell, Paperclip, Headset } from 'lucide-react';
 import { m } from '@/paraglide/messages';
 
 export interface NavItem {
@@ -26,6 +26,7 @@ export interface NavItem {
   badge?: number;
   isBackButton?: boolean;
   isSettingsButton?: boolean;
+  isSupportButton?: boolean;
   disabled?: boolean;
   target?: string;
   shortcut?: string;
@@ -288,6 +289,13 @@ export const bottomNavItems = [
   {
     title: '',
     items: [
+      {
+        id: 'support',
+        title: m['navigation.sidebar.support'](),
+        url: '#support',
+        icon: Headset,
+        isSupportButton: true,
+      },
       {
         id: 'settings',
         title: m['navigation.sidebar.settings'](),

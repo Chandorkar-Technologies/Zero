@@ -3,6 +3,7 @@ import { Collapsible, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useCommandPalette } from '../context/command-palette-context';
 import { LabelDialog } from '@/components/labels/label-dialog';
 import { useActiveConnection } from '@/hooks/use-connections';
+import { useChatwoot } from '@/providers/chatwoot-provider';
 import { useMutation } from '@tanstack/react-query';
 import { useSidebar } from '../context/sidebar-context';
 import { useTRPC } from '@/providers/query-provider';
@@ -32,6 +33,7 @@ interface NavItemProps extends NavItem {
   onClick?: (e: React.MouseEvent<HTMLAnchorElement>) => void;
   suffix?: React.ComponentType<IconProps>;
   isSettingsPage?: boolean;
+  isSupportButton?: boolean;
 }
 
 interface NavMainProps {
@@ -238,6 +240,7 @@ function NavItem(item: NavItemProps & { href: string }) {
   const iconRef = useRef<IconRefType>(null);
   const { data: stats } = useStats();
   const { clearAllFilters } = useCommandPalette();
+  const { openChat } = useChatwoot();
 
   const { state, setOpenMobile } = useSidebar();
 
@@ -254,12 +257,36 @@ function NavItem(item: NavItemProps & { href: string }) {
   }
 
   const handleClick = (e: React.MouseEvent) => {
+    if (item.isSupportButton) {
+      e.preventDefault();
+      openChat();
+      setOpenMobile(false);
+      return;
+    }
     if (item.onClick) {
       item.onClick(e as React.MouseEvent<HTMLAnchorElement>);
     }
     clearAllFilters();
     setOpenMobile(false);
   };
+
+  // Support button renders as a button instead of a link
+  if (item.isSupportButton) {
+    return (
+      <SidebarMenuButton
+        tooltip={state === 'collapsed' ? item.title : undefined}
+        className={cn(
+          'hover:bg-subtleWhite flex cursor-pointer items-center dark:hover:bg-[#202020]',
+        )}
+        onClick={handleClick}
+      >
+        {item.icon && <item.icon ref={iconRef} className="mr-2 shrink-0 text-[#898989]" />}
+        <p className="relative bottom-px mt-0.5 min-w-0 flex-1 truncate text-[13px]">
+          {item.title}
+        </p>
+      </SidebarMenuButton>
+    );
+  }
 
   return (
     <Collapsible defaultOpen={item.isActive}>
