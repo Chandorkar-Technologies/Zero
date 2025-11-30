@@ -143,7 +143,8 @@ export const notificationsRouter = router({
       // Check if this is an IMAP connection - query from local database
       if (foundConnection.providerId === 'imap') {
         // Query emails from local PostgreSQL database
-        const emails = await ctx.db
+        // Fetch more to filter by INBOX label afterwards
+        const allEmails = await ctx.db
           .select({
             id: email.id,
             threadId: email.threadId,
@@ -153,11 +154,18 @@ export const notificationsRouter = router({
             from: email.from,
             internalDate: email.internalDate,
             isRead: email.isRead,
+            labels: email.labels,
           })
           .from(email)
           .where(eq(email.connectionId, connectionId))
           .orderBy(desc(email.internalDate))
-          .limit(200);
+          .limit(500);
+
+        // Filter to only INBOX emails (exclude sent, trash, spam, etc.)
+        const emails = allEmails.filter((e) => {
+          const labels = (e.labels as string[]) || [];
+          return labels.includes('INBOX');
+        }).slice(0, 200);
 
         return processEmailsToNotifications(emails, connectionId, types, limit);
       }
@@ -247,15 +255,23 @@ export const notificationsRouter = router({
       // Check if this is an IMAP connection - query from local database
       if (foundConnection.providerId === 'imap') {
         // Query emails from local PostgreSQL database
-        const emails = await ctx.db
+        // Fetch more to filter by INBOX label afterwards
+        const allEmails = await ctx.db
           .select({
             id: email.id,
             subject: email.subject,
+            labels: email.labels,
           })
           .from(email)
           .where(eq(email.connectionId, connectionId))
           .orderBy(desc(email.internalDate))
-          .limit(200);
+          .limit(500);
+
+        // Filter to only INBOX emails (exclude sent, trash, spam, etc.)
+        const emails = allEmails.filter((e) => {
+          const labels = (e.labels as string[]) || [];
+          return labels.includes('INBOX');
+        }).slice(0, 200);
 
         const counts = countNotifications(emails);
         return {
