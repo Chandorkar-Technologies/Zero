@@ -578,17 +578,7 @@
             "binding": "send_email_queue",
           },
         ],
-        "consumers": [
-          {
-            "queue": "subscribe-queue-prod",
-          },
-          {
-            "queue": "thread-queue-prod",
-          },
-          {
-            "queue": "send-email-queue-prod",
-          },
-        ],
+        // Note: Queue consumers are handled by nubo-webhooks worker
       },
       "migrations": [
         {
