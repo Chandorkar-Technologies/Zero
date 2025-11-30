@@ -3,6 +3,12 @@ import { Redis } from '@upstash/redis';
 
 // Cloudflare Workers-compatible Resend client using direct REST API
 // The official Resend SDK uses 'cache' in fetch options which CF Workers doesn't support
+interface EmailAttachment {
+  filename: string;
+  content: string; // Base64 encoded content
+  content_type?: string;
+}
+
 interface SendEmailOptions {
   from: string;
   to: string | string[];
@@ -10,6 +16,7 @@ interface SendEmailOptions {
   html?: string;
   react?: unknown; // Accept react but skip rendering - not CF Workers compatible yet
   scheduledAt?: string;
+  attachments?: EmailAttachment[];
 }
 
 interface ResendResponse {
@@ -45,6 +52,7 @@ const createResendClient = (apiKey: string) => {
         subject: options.subject,
         html,
         ...(options.scheduledAt && { scheduled_at: options.scheduledAt }),
+        ...(options.attachments && { attachments: options.attachments }),
       }),
     });
 

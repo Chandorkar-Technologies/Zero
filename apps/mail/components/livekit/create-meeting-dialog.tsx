@@ -14,8 +14,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, X, Mail, Plus } from 'lucide-react';
 
 interface CreateMeetingDialogProps {
   open: boolean;
@@ -35,6 +36,8 @@ export function CreateMeetingDialog({
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
+  const [invitees, setInvitees] = useState<string[]>([]);
+  const [inviteeInput, setInviteeInput] = useState('');
 
   const { mutateAsync: createMeeting, isPending } = useMutation(
     trpc.livekit.create.mutationOptions(),
@@ -68,9 +71,11 @@ export function CreateMeetingDialog({
         description: description || undefined,
         recordingEnabled,
         scheduledFor,
+        invitees: isScheduled && invitees.length > 0 ? invitees : undefined,
       });
 
-      toast.success(isScheduled ? 'Meeting scheduled successfully' : 'Meeting created successfully');
+      const inviteMsg = result.invitesSent > 0 ? ` Invites sent to ${result.invitesSent} participant(s).` : '';
+      toast.success(isScheduled ? `Meeting scheduled successfully.${inviteMsg}` : 'Meeting created successfully');
 
       if (!isScheduled) {
         onMeetingCreated(result.meetingId);
@@ -85,6 +90,8 @@ export function CreateMeetingDialog({
       setIsScheduled(false);
       setScheduledDate('');
       setScheduledTime('');
+      setInvitees([]);
+      setInviteeInput('');
     } catch (error) {
       console.error('Failed to create meeting:', error);
       toast.error('Failed to create meeting');
@@ -142,29 +149,90 @@ export function CreateMeetingDialog({
             </div>
 
             {isScheduled && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="date">Date *</Label>
-                  <Input
-                    id="date"
-                    type="date"
-                    value={scheduledDate}
-                    onChange={(e) => setScheduledDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
-                    required={isScheduled}
-                  />
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="date">Date *</Label>
+                    <Input
+                      id="date"
+                      type="date"
+                      value={scheduledDate}
+                      onChange={(e) => setScheduledDate(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
+                      required={isScheduled}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="time">Time *</Label>
+                    <Input
+                      id="time"
+                      type="time"
+                      value={scheduledTime}
+                      onChange={(e) => setScheduledTime(e.target.value)}
+                      required={isScheduled}
+                    />
+                  </div>
                 </div>
+
                 <div className="grid gap-2">
-                  <Label htmlFor="time">Time *</Label>
-                  <Input
-                    id="time"
-                    type="time"
-                    value={scheduledTime}
-                    onChange={(e) => setScheduledTime(e.target.value)}
-                    required={isScheduled}
-                  />
+                  <Label htmlFor="invitees">
+                    <Mail className="mr-1 inline h-4 w-4" />
+                    Invite Participants (optional)
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="invitees"
+                      type="email"
+                      placeholder="email@example.com"
+                      value={inviteeInput}
+                      onChange={(e) => setInviteeInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const email = inviteeInput.trim().toLowerCase();
+                          if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !invitees.includes(email)) {
+                            setInvitees([...invitees, email]);
+                            setInviteeInput('');
+                          }
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => {
+                        const email = inviteeInput.trim().toLowerCase();
+                        if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !invitees.includes(email)) {
+                          setInvitees([...invitees, email]);
+                          setInviteeInput('');
+                        }
+                      }}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {invitees.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {invitees.map((email) => (
+                        <Badge key={email} variant="secondary" className="px-2 py-1">
+                          {email}
+                          <button
+                            type="button"
+                            className="ml-2 hover:text-destructive"
+                            onClick={() => setInvitees(invitees.filter((e) => e !== email))}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Press Enter or click + to add. Invites with calendar event will be sent.
+                  </p>
                 </div>
-              </div>
+              </>
             )}
 
             <div className="flex items-center justify-between">
