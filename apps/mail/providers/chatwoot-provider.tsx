@@ -31,8 +31,10 @@ interface ChatwootContextType {
 
 const ChatwootContext = createContext<ChatwootContextType | null>(null);
 
-const CHATWOOT_TOKEN = 'uqDkxPUGDCg3pAaAx9S2CmS6';
-const CHATWOOT_BASE_URL = 'https://app.chatwoot.com';
+// Get Chatwoot config from environment variables
+// To fix: Go to app.chatwoot.com → Settings → Inboxes → Your Website Inbox → Copy Website Token
+const CHATWOOT_TOKEN = import.meta.env.VITE_CHATWOOT_TOKEN || '';
+const CHATWOOT_BASE_URL = import.meta.env.VITE_CHATWOOT_BASE_URL || 'https://app.chatwoot.com';
 
 const SUPPORT_EMAIL = 'support@nubo.email';
 
@@ -41,6 +43,13 @@ export function ChatwootProvider({ children }: PropsWithChildren) {
   const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
+    // Skip initialization if no token is configured
+    if (!CHATWOOT_TOKEN) {
+      console.warn('[Chatwoot] No website token configured. Set VITE_CHATWOOT_TOKEN environment variable.');
+      setLoadError(true);
+      return;
+    }
+
     // Set chatwoot settings before loading the script
     window.chatwootSettings = {
       hideMessageBubble: true, // We'll use our own button
@@ -81,7 +90,7 @@ export function ChatwootProvider({ children }: PropsWithChildren) {
           websiteToken: CHATWOOT_TOKEN,
           baseUrl: CHATWOOT_BASE_URL,
         });
-        console.log('[Chatwoot] SDK initialized');
+        console.log('[Chatwoot] SDK initialized with token:', CHATWOOT_TOKEN.substring(0, 8) + '...');
       }
     };
 

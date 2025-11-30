@@ -16,6 +16,7 @@ export default [
     route('/hr', '(full-width)/hr.tsx'),
     route('/meet/:meetingId', '(full-width)/meet/[meetingId]/page.tsx'),
     route('/drive/shared/:token', '(routes)/drive/shared/[token]/page.tsx'),
+    route('/drive/shared/:token/edit', '(routes)/drive/shared/[token]/edit/page.tsx'),
   ]),
 
   route('/login', '(auth)/login/page.tsx'),

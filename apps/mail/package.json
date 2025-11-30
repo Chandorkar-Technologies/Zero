@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "react-router dev",
     "build": "react-router build",
-    "build:production": "CLOUDFLARE_ENV=production VITE_PUBLIC_BACKEND_URL=https://api.nubo.email VITE_PUBLIC_APP_URL=https://nubo.email react-router build",
-    "build:staging": "CLOUDFLARE_ENV=staging VITE_PUBLIC_BACKEND_URL=https://sapi.nubo.email VITE_PUBLIC_APP_URL=https://staging.nubo.email react-router build",
+    "build:production": "CLOUDFLARE_ENV=production VITE_PUBLIC_BACKEND_URL=https://api.nubo.email VITE_PUBLIC_APP_URL=https://nubo.email VITE_CHATWOOT_TOKEN=Z7aeq6gwgZeY9JBQwq8tBYHh react-router build",
+    "build:staging": "CLOUDFLARE_ENV=staging VITE_PUBLIC_BACKEND_URL=https://sapi.nubo.email VITE_PUBLIC_APP_URL=https://staging.nubo.email VITE_CHATWOOT_TOKEN=Z7aeq6gwgZeY9JBQwq8tBYHh react-router build",
     "start": "wrangler dev --port 3000 --show-interactive-dev-session=false",
     "types": "wrangler types",
     "deploy": "wrangler deploy",

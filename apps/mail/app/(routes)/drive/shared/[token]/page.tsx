@@ -17,6 +17,7 @@ import {
   HardDrive,
   Clock,
   User,
+  Pencil,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -136,6 +137,25 @@ export default function SharedFilePage() {
     shareInfo.file.mimeType.startsWith('video/')
   );
 
+  // Check if file is editable (documents, spreadsheets, presentations)
+  const isEditable = shareInfo?.file?.mimeType && (
+    shareInfo.file.mimeType.includes('word') ||
+    shareInfo.file.mimeType.includes('document') ||
+    shareInfo.file.mimeType.includes('sheet') ||
+    shareInfo.file.mimeType.includes('excel') ||
+    shareInfo.file.mimeType.includes('presentation') ||
+    shareInfo.file.mimeType.includes('powerpoint') ||
+    shareInfo.file.mimeType === 'text/plain'
+  );
+
+  // Check if user has edit access
+  const canEdit = shareInfo?.accessLevel === 'edit';
+
+  const handleEdit = () => {
+    if (!token) return;
+    navigate(`/drive/shared/${token}/edit`);
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -173,7 +193,7 @@ export default function SharedFilePage() {
     <div className="flex min-h-screen flex-col bg-background">
       {/* Header */}
       <header className="border-b bg-card px-4 py-3">
-        <div className="mx-auto flex max-w-4xl items-center gap-4">
+        <div className="container mx-auto flex items-center gap-4">
           <HardDrive className="h-6 w-6" />
           <span className="text-lg font-semibold">Nubo Drive</span>
           <span className="text-sm text-muted-foreground">Shared with you</span>
@@ -181,8 +201,8 @@ export default function SharedFilePage() {
       </header>
 
       {/* Content */}
-      <main className="flex-1 p-4">
-        <div className="mx-auto max-w-4xl">
+      <main className="flex-1 p-6">
+        <div className="container mx-auto">
           {/* Preview Modal */}
           {showPreview && previewUrl && shareInfo.file && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
@@ -268,14 +288,20 @@ export default function SharedFilePage() {
 
               {/* Actions */}
               {shareInfo.type === 'file' && (
-                <div className="mt-8 flex gap-3">
+                <div className="mt-8 flex flex-wrap gap-3">
+                  {canEdit && isEditable && (
+                    <Button onClick={handleEdit}>
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Edit
+                    </Button>
+                  )}
                   {isPreviewable && (
                     <Button variant="outline" onClick={handlePreview}>
                       <Eye className="mr-2 h-4 w-4" />
                       Preview
                     </Button>
                   )}
-                  <Button onClick={handleDownload}>
+                  <Button variant={canEdit && isEditable ? 'outline' : 'default'} onClick={handleDownload}>
                     <Download className="mr-2 h-4 w-4" />
                     Download
                   </Button>

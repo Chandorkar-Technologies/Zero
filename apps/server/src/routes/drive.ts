@@ -4,6 +4,24 @@ import { createDb } from '../db';
 import { driveFile, driveFolder } from '../db/schema';
 import { env } from '../env';
 import type { HonoContext } from '../ctx';
+import jwt from '@tsndr/cloudflare-worker-jwt';
+
+// Helper to get file extension
+function getFileExtension(filename: string): string {
+  const parts = filename.split('.');
+  return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
+}
+
+// Helper to check if file is editable in OnlyOffice
+function isEditableInOnlyOffice(filename: string): boolean {
+  const ext = getFileExtension(filename);
+  const editableExtensions = [
+    'doc', 'docx', 'odt', 'rtf', 'txt',
+    'xls', 'xlsx', 'ods', 'csv',
+    'ppt', 'pptx', 'odp',
+  ];
+  return editableExtensions.includes(ext);
+}
 
 export const driveApiRouter = new Hono<HonoContext>();
 
@@ -420,4 +438,124 @@ driveApiRouter.get('/shared/:token/preview', async (c) => {
   } finally {
     await conn.end();
   }
+});
+
+// Get OnlyOffice editor config for shared file (no auth required, but needs edit access)
+driveApiRouter.get('/shared/:token/editor-config', async (c) => {
+  const token = c.req.param('token');
+
+  const { db, conn } = createDb(env.HYPERDRIVE.connectionString);
+
+  try {
+    const { driveShare } = await import('../db/schema');
+
+    // Find the share by token with file and owner info
+    const share = await db.query.driveShare.findFirst({
+      where: eq(driveShare.shareToken, token),
+      with: {
+        file: true,
+        owner: {
+          columns: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!share) {
+      return c.json({ error: 'Share not found' }, 404);
+    }
+
+    // Check if share has expired
+    if (share.expiresAt && new Date(share.expiresAt) < new Date()) {
+      return c.json({ error: 'This share link has expired' }, 410);
+    }
+
+    // Check if user has edit access
+    if (share.accessLevel !== 'edit') {
+      return c.json({ error: 'You do not have edit access to this file' }, 403);
+    }
+
+    if (!share.file) {
+      return c.json({ error: 'Only files can be edited' }, 400);
+    }
+
+    const file = share.file;
+
+    // Check if file is editable in OnlyOffice
+    if (!isEditableInOnlyOffice(file.name)) {
+      return c.json({ error: 'File type not supported for editing' }, 400);
+    }
+
+    const onlyOfficeUrl = env.ONLYOFFICE_URL || 'https://office.nubo.email';
+    const jwtSecret = env.ONLYOFFICE_JWT_SECRET;
+    const backendUrl = env.VITE_PUBLIC_BACKEND_URL;
+
+    if (!jwtSecret) {
+      return c.json({ error: 'OnlyOffice not configured' }, 500);
+    }
+
+    const ext = getFileExtension(file.name);
+    const documentType = ['doc', 'docx', 'odt', 'rtf', 'txt'].includes(ext)
+      ? 'word'
+      : ['xls', 'xlsx', 'ods', 'csv'].includes(ext)
+        ? 'cell'
+        : ['ppt', 'pptx', 'odp'].includes(ext)
+          ? 'slide'
+          : 'word';
+
+    // Generate unique key for this editing session
+    const documentKey = `${file.id}-${new Date(file.updatedAt).getTime()}`;
+
+    // OnlyOffice Document Server configuration
+    const config = {
+      document: {
+        fileType: ext,
+        key: documentKey,
+        title: file.name,
+        url: `${backendUrl}/api/drive/file/${file.id}/content`,
+      },
+      documentType,
+      editorConfig: {
+        callbackUrl: `${backendUrl}/api/drive/onlyoffice/callback`,
+        user: {
+          id: `shared-${token.substring(0, 8)}`,
+          name: 'Shared User',
+        },
+        customization: {
+          autosave: true,
+          forcesave: true,
+        },
+      },
+    };
+
+    // Sign the config with JWT
+    const jwtToken = await jwt.sign(config, jwtSecret, { algorithm: 'HS256' });
+
+    return c.json({
+      config: {
+        ...config,
+        token: jwtToken,
+      },
+      onlyOfficeUrl,
+    });
+  } catch (error) {
+    console.error('[Drive Share] Error getting editor config:', error);
+    return c.json({ error: 'Failed to get editor configuration' }, 500);
+  } finally {
+    await conn.end();
+  }
+});
+
+// CORS preflight for shared editor config
+driveApiRouter.options('/shared/:token/editor-config', () => {
+  return new Response(null, {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
 });
