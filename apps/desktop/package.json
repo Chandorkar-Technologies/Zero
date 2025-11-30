@@ -2,6 +2,7 @@
   "name": "nubo-desktop",
   "version": "1.0.0",
   "description": "Nubo Email - Desktop App",
+  "homepage": "https://nubo.email",
   "main": "main.js",
   "author": "Nubo <hello@nubo.email>",
   "license": "AGPL-3.0",
@@ -91,8 +92,8 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "nubo-email",
-      "repo": "nubo-desktop"
+      "owner": "Chandorkar-Technologies",
+      "repo": "Zero"
     }
   }
 }

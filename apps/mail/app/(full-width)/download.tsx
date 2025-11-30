@@ -17,7 +17,7 @@ interface DownloadOption {
   architecture?: string;
 }
 
-const GITHUB_RELEASES_URL = 'https://github.com/Mail-0/Zero/releases/latest';
+const GITHUB_RELEASES_URL = 'https://github.com/Chandorkar-Technologies/Zero/releases/latest';
 
 const downloadOptions: DownloadOption[] = [
   {
@@ -25,7 +25,7 @@ const downloadOptions: DownloadOption[] = [
     name: 'macOS (Apple Silicon)',
     description: 'For Mac with M1, M2, or M3 chip',
     icon: <Apple className="h-8 w-8" />,
-    downloadUrl: `${GITHUB_RELEASES_URL}/download/Nubo-1.0.0-arm64.dmg`,
+    downloadUrl: `${GITHUB_RELEASES_URL}/download/v1.0.0/Nubo-1.0.0-arm64.dmg`,
     fileSize: '~94 MB',
     architecture: 'ARM64',
   },
@@ -34,27 +34,27 @@ const downloadOptions: DownloadOption[] = [
     name: 'macOS (Intel)',
     description: 'For Mac with Intel processor',
     icon: <Apple className="h-8 w-8" />,
-    downloadUrl: `${GITHUB_RELEASES_URL}/download/Nubo-1.0.0.dmg`,
+    downloadUrl: `${GITHUB_RELEASES_URL}/download/v1.0.0/Nubo-1.0.0.dmg`,
     fileSize: '~98 MB',
     architecture: 'x64',
   },
   {
     id: 'windows',
     name: 'Windows',
-    description: 'For Windows 10 or later',
+    description: 'For Windows 10 or later (Coming Soon)',
     icon: <Monitor className="h-8 w-8" />,
-    downloadUrl: `${GITHUB_RELEASES_URL}/download/Nubo-Setup-1.0.0.exe`,
-    fileSize: '~90 MB',
+    downloadUrl: `${GITHUB_RELEASES_URL}`,
+    fileSize: 'Coming Soon',
     architecture: 'x64 / ARM64',
   },
   {
     id: 'linux',
-    name: 'Linux',
+    name: 'Linux (x64)',
     description: 'AppImage for most Linux distributions',
     icon: <Monitor className="h-8 w-8" />,
-    downloadUrl: `${GITHUB_RELEASES_URL}/download/Nubo-1.0.0.AppImage`,
-    fileSize: '~100 MB',
-    architecture: 'x64 / ARM64',
+    downloadUrl: `${GITHUB_RELEASES_URL}/download/v1.0.0/Nubo-1.0.0.AppImage`,
+    fileSize: '~103 MB',
+    architecture: 'x64',
   },
 ];
 
