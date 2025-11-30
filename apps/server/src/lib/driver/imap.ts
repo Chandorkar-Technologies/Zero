@@ -6,7 +6,7 @@ import { env } from '../../env';
 import { createDb } from '../../db';
 import { email } from '../../db/schema';
 import { eq, and, desc, like } from 'drizzle-orm';
-import * as nodemailer from 'nodemailer';
+import { WorkerMailer } from 'worker-mailer';
 
 export class ImapMailManager implements MailManager {
     private db: ReturnType<typeof createDb>['db'];
@@ -244,42 +244,46 @@ export class ImapMailManager implements MailManager {
         }
 
         const { smtp, auth } = imapConfig;
-
-        // Create nodemailer transporter with user's SMTP settings
-        const transporter = nodemailer.createTransport({
-            host: smtp.host,
-            port: smtp.port,
-            secure: smtp.secure, // true for 465, false for other ports (STARTTLS)
-            auth: {
-                user: auth.user,
-                pass: auth.pass,
-            },
-        });
-
-        const attachments = data.attachments.map(att => ({
-            filename: att.name,
-            content: Buffer.from(att.base64, 'base64'),
-        }));
-
         const fromEmail = data.fromEmail || this.config.auth.email || auth.user;
 
         try {
-            const info = await transporter.sendMail({
-                from: fromEmail,
-                to: data.to.map(t => t.email),
-                cc: data.cc?.map(t => t.email),
-                bcc: data.bcc?.map(t => t.email),
+            // Use worker-mailer which works with Cloudflare Workers via cloudflare:sockets
+            const mailer = await WorkerMailer.connect({
+                credentials: {
+                    username: auth.user,
+                    password: auth.pass,
+                },
+                authType: 'plain',
+                host: smtp.host,
+                port: smtp.port,
+                secure: smtp.secure,
+            });
+
+            // Prepare attachments for worker-mailer format
+            const attachments = data.attachments.map(att => ({
+                filename: att.name,
+                content: att.base64, // worker-mailer accepts base64 directly
+                mimeType: att.contentType || 'application/octet-stream',
+            }));
+
+            // Send the email
+            await mailer.send({
+                from: { email: fromEmail },
+                to: data.to.map(t => ({ email: t.email, name: t.name })),
+                cc: data.cc?.map(t => ({ email: t.email, name: t.name })),
+                bcc: data.bcc?.map(t => ({ email: t.email, name: t.name })),
                 subject: data.subject,
                 html: data.message,
-                attachments,
+                attachments: attachments.length > 0 ? attachments : undefined,
                 headers: {
                     ...data.headers,
                     ...(data.originalMessage ? { 'In-Reply-To': data.originalMessage } : {}),
                 },
             });
 
-            console.log(`[IMAP Driver] Email sent via SMTP: ${info.messageId}`);
-            return { id: info.messageId || 'unknown' };
+            const messageId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}@nubo.email`;
+            console.log(`[IMAP Driver] Email sent via SMTP: ${messageId}`);
+            return { id: messageId };
         } catch (error) {
             console.error('[IMAP Driver] Failed to send email via SMTP:', error);
             throw new Error(`Failed to send email via SMTP: ${error instanceof Error ? error.message : String(error)}`);
