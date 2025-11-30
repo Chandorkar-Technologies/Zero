@@ -100,6 +100,11 @@ export type ZeroEnv = {
   LIVEKIT_API_SECRET: string;
   LIVEKIT_WS_URL: string;
   RECORDINGS_BUCKET: R2Bucket;
+  // R2 S3-compatible API credentials for LiveKit Egress
+  R2_ACCOUNT_ID?: string;
+  R2_ACCESS_KEY_ID?: string;
+  R2_SECRET_ACCESS_KEY?: string;
+  R2_RECORDINGS_BUCKET_NAME?: string;
   OTEL_EXPORTER_OTLP_ENDPOINT?: string;
   OTEL_EXPORTER_OTLP_HEADERS?: string;
   OTEL_SERVICE_NAME?: string;
