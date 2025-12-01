@@ -16,18 +16,30 @@ export class SmtpService {
         this.logger.info(`Sending email from ${emailOptions.from} to ${emailOptions.to.join(', ')}`);
 
         const config = connection.config;
-        if (!config || !config.auth) {
+
+        // IMAP connections store SMTP config under config.smtp and auth under config.auth
+        const smtpConfig = config.smtp || config;
+        const authConfig = config.auth || smtpConfig.auth;
+
+        this.logger.info(`[SMTP] Using SMTP config: host=${smtpConfig.host}, port=${smtpConfig.port}, secure=${smtpConfig.secure}`);
+
+        if (!smtpConfig || !smtpConfig.host || !authConfig) {
+            this.logger.error(`[SMTP] Invalid config structure:`, {
+                hasSmtp: !!config.smtp,
+                hasAuth: !!config.auth,
+                hasHost: !!smtpConfig?.host
+            });
             throw new Error(`Invalid SMTP configuration for connection ${connection.id}`);
         }
 
         // Create reusable transporter object using the default SMTP transport
         const transporter = nodemailer.createTransport({
-            host: config.host,
-            port: config.port,
-            secure: config.secure, // true for 465, false for other ports
+            host: smtpConfig.host,
+            port: smtpConfig.port,
+            secure: smtpConfig.secure, // true for 465, false for other ports
             auth: {
-                user: config.auth.user,
-                pass: config.auth.pass,
+                user: authConfig.user,
+                pass: authConfig.pass,
             },
         });
 
