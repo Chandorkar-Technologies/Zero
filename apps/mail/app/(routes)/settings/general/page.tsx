@@ -272,7 +272,7 @@ export default function GeneralPage() {
     [aliases],
   );
 
-  const renderZeroSignatureField = useCallback(
+  const _renderZeroSignatureField = useCallback(
     ({ field }: { field: any }) => (
       <FormItem className="flex max-w-xl flex-row items-center justify-between rounded-lg border px-4 py-2">
         <div className="space-y-0.5">
@@ -413,11 +413,13 @@ export default function GeneralPage() {
               )}
             </div>
 
+            {/* Temporarily disabled - zeroSignature setting
             <FormField
               control={form.control}
               name="zeroSignature"
               render={renderZeroSignatureField}
             />
+            */}
             <FormField
               control={form.control}
               name="autoRead"

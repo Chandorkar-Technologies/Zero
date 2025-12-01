@@ -8,11 +8,11 @@ import {
   useNavigate,
   type MetaFunction,
 } from 'react-router';
-import { Analytics as DubAnalytics } from '@dub/analytics/react';
+import { Analytics as DubAnalyticsBase } from '@dub/analytics/react';
 import { ServerProviders } from '@/providers/server-providers';
 import { ClientProviders } from '@/providers/client-providers';
 import { createTRPCClient, httpBatchLink } from '@trpc/client';
-import { useEffect, type PropsWithChildren } from 'react';
+import { useEffect, useState, type PropsWithChildren } from 'react';
 import type { AppRouter } from '@zero/server/trpc';
 import { Button } from '@/components/ui/button';
 import { getLocale } from '@/paraglide/runtime';
@@ -25,6 +25,16 @@ import { ArrowLeft } from 'lucide-react';
 import * as Sentry from '@sentry/react';
 import superjson from 'superjson';
 import './globals.css';
+
+// Client-only wrapper for DubAnalytics to avoid SSR issues with React version mismatch
+function DubAnalytics({ domainsConfig }: { domainsConfig: { refer: string } }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  if (!mounted) return null;
+  return <DubAnalyticsBase domainsConfig={domainsConfig} />;
+}
 
 const getUrl = () => import.meta.env.VITE_PUBLIC_BACKEND_URL + '/api/trpc';
 

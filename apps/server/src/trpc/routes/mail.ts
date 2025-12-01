@@ -246,6 +246,16 @@ export const mailRouter = router({
 
       console.log(`[markAsRead] providerId=${activeConnection.providerId}, connectionId=${activeConnection.id}, threadIds=${input.ids.join(',')}`);
 
+      // Sync to email provider (Gmail/IMAP server)
+      try {
+        const driver = await connectionToDriver(activeConnection);
+        await driver.markAsRead(input.ids);
+        console.log('[markAsRead] Successfully synced read status to email provider');
+      } catch (error) {
+        console.error('[markAsRead] Failed to sync read status to email provider:', error);
+        // Continue to update local DB even if provider sync fails
+      }
+
       // Use IMAP-specific function for IMAP connections
       if (activeConnection.providerId === 'imap') {
         console.log('[markAsRead] Using IMAP-specific path');
@@ -273,6 +283,18 @@ export const mailRouter = router({
     // TODO: Add batching
     .mutation(async ({ input, ctx }) => {
       const { activeConnection } = ctx;
+
+      console.log(`[markAsUnread] providerId=${activeConnection.providerId}, connectionId=${activeConnection.id}, threadIds=${input.ids.join(',')}`);
+
+      // Sync to email provider (Gmail/IMAP server)
+      try {
+        const driver = await connectionToDriver(activeConnection);
+        await driver.markAsUnread(input.ids);
+        console.log('[markAsUnread] Successfully synced unread status to email provider');
+      } catch (error) {
+        console.error('[markAsUnread] Failed to sync unread status to email provider:', error);
+        // Continue to update local DB even if provider sync fails
+      }
 
       // Use IMAP-specific function for IMAP connections
       if (activeConnection.providerId === 'imap') {

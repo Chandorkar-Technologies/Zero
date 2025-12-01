@@ -1,21 +1,35 @@
-import { useKeyboardLayout } from '@/components/keyboard-layout-indicator';
 import { LoadingProvider } from '@/components/context/loading-context';
 import { ChatwootProvider } from '@/providers/chatwoot-provider';
 import { NuqsAdapter } from 'nuqs/adapters/react-router/v7';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { PostHogProvider } from '@/lib/posthog-provider';
-import { useSettings } from '@/hooks/use-settings';
 import { Provider as JotaiProvider } from 'jotai';
-import type { PropsWithChildren } from 'react';
+import { useState, useEffect, type PropsWithChildren } from 'react';
 import Toaster from '@/components/ui/toast';
 import { ThemeProvider } from 'next-themes';
 
+// Inner component that uses client-only hooks
+function ClientOnlyProviders({ children }: PropsWithChildren) {
+  // Dynamically import and use client-only hooks after hydration
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    // Initialize keyboard layout after mount
+    import('@/components/keyboard-layout-indicator').then(({ initKeyboardLayout }) => {
+      initKeyboardLayout?.();
+    });
+  }, []);
+
+  // During SSR or before hydration, render without client-specific behavior
+  if (!mounted) {
+    return <>{children}</>;
+  }
+
+  return <>{children}</>;
+}
+
 export function ClientProviders({ children }: PropsWithChildren) {
-  const { data } = useSettings();
-  useKeyboardLayout();
-
-  const theme = data?.settings.colorTheme || 'system';
-
   return (
     <NuqsAdapter>
       <JotaiProvider>
@@ -23,13 +37,15 @@ export function ClientProviders({ children }: PropsWithChildren) {
           attribute="class"
           enableSystem
           disableTransitionOnChange
-          defaultTheme={theme}
+          defaultTheme="system"
         >
           <SidebarProvider>
             <PostHogProvider>
               <ChatwootProvider>
                 <LoadingProvider>
-                  {children}
+                  <ClientOnlyProviders>
+                    {children}
+                  </ClientOnlyProviders>
                   <Toaster />
                 </LoadingProvider>
               </ChatwootProvider>

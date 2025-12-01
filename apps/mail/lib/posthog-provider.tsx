@@ -1,11 +1,13 @@
 // app/providers.tsx
+'use client';
 
 import { PostHogProvider as PHProvider } from 'posthog-js/react';
 import { useSession } from '@/lib/auth-client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import posthog from 'posthog-js';
 
-export function PostHogProvider({ children }: { children: React.ReactNode }) {
+// Inner component that uses client-only hooks
+function PostHogProviderInner({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
 
   useEffect(() => {
@@ -30,4 +32,19 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
   }, [session]);
 
   return <PHProvider client={posthog}>{children}</PHProvider>;
+}
+
+export function PostHogProvider({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // During SSR, render children without PostHog wrapper
+  if (!mounted) {
+    return <>{children}</>;
+  }
+
+  return <PostHogProviderInner>{children}</PostHogProviderInner>;
 }
