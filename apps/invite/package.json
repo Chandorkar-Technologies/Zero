@@ -1,0 +1,36 @@
+{
+  "name": "@zero/invite",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3002",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "pages:build": "npx @cloudflare/next-on-pages",
+    "pages:deploy": "cp wrangler.toml .vercel/output/static/_worker.js/ && wrangler pages deploy .vercel/output/static --project-name=nubo-invite",
+    "deploy:pages": "pnpm build && pnpm pages:build && pnpm pages:deploy"
+  },
+  "dependencies": {
+    "@cloudflare/next-on-pages": "^1.13.0",
+    "@neondatabase/serverless": "1.0.2",
+    "clsx": "^2.1.1",
+    "framer-motion": "^11.0.0",
+    "nanoid": "^5.0.7",
+    "next": "^14.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "resend": "^4.1.2",
+    "tailwind-merge": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.4.5"
+  }
+}
