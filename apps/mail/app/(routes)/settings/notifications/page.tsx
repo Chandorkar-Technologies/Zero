@@ -120,7 +120,7 @@ export default function NotificationsPage() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       newMailNotifications: 'all',
-      marketingCommunications: false,
+      marketingCommunications: true, // Enable marketing communications by default
     },
   });
 

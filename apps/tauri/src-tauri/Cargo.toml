@@ -18,18 +18,28 @@ tauri-plugin-notification = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-os = "2"
+tauri-plugin-store = "2"
+tauri-plugin-log = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 urlencoding = "2"
 url = "2"
+log = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 
+# Production optimizations
 [profile.release]
 panic = "abort"
 codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+# Development profile - faster builds
+[profile.dev]
+opt-level = 0
+debug = true

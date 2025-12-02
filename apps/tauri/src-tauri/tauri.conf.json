@@ -10,13 +10,18 @@
   "app": {
     "windows": [],
     "security": {
-      "csp": "default-src 'self' https://nubo.email https://*.nubo.email; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://nubo.email https://*.nubo.email; style-src 'self' 'unsafe-inline' https://nubo.email https://*.nubo.email; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; frame-src 'self' https:;"
+      "csp": "default-src 'self' https://nubo.email https://*.nubo.email; script-src 'self' https://nubo.email https://*.nubo.email; style-src 'self' 'unsafe-inline' https://nubo.email https://*.nubo.email https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com https://fonts.googleapis.com; connect-src 'self' https://nubo.email https://*.nubo.email https://api.nubo.email wss://nubo.email wss://*.nubo.email; frame-src 'self' https://nubo.email https://*.nubo.email; media-src 'self' blob: https:; object-src 'none'; base-uri 'self'; form-action 'self' https://nubo.email https://*.nubo.email; frame-ancestors 'self'; upgrade-insecure-requests",
+      "dangerousDisableAssetCspModification": false,
+      "freezePrototype": true,
+      "assetProtocol": {
+        "enable": false
+      }
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": false,
+    "createUpdaterArtifacts": "v1Compatible",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -24,21 +29,37 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": [],
+    "category": "Productivity",
+    "shortDescription": "Nubo Email - Modern email client",
+    "longDescription": "Nubo is a modern, AI-powered email client that helps you manage your inbox efficiently.",
     "macOS": {
       "minimumSystemVersion": "10.15",
       "exceptionDomain": "",
       "signingIdentity": null,
       "providerShortName": null,
-      "entitlements": null
+      "entitlements": null,
+      "dmg": {
+        "background": null,
+        "appPosition": { "x": 180, "y": 170 },
+        "applicationFolderPosition": { "x": 480, "y": 170 }
+      }
     },
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": ""
+      "timestampUrl": "http://timestamp.digicert.com",
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico"
+      }
     },
     "linux": {
       "appimage": {
         "bundleMediaFramework": true
+      },
+      "deb": {
+        "depends": []
       }
     },
     "iOS": {
@@ -50,7 +71,7 @@
       "all": true
     },
     "shell": {
-      "open": true
+      "open": "^https?://(nubo\\.email|.*\\.nubo\\.email|mailto:).*$"
     },
     "deep-link": {
       "mobile": [
@@ -64,13 +85,28 @@
       }
     },
     "updater": {
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IE5VQk9fVVBEQVRFUgpSV1NLMjRtTnVib1VQREFURVIKCg==",
       "endpoints": [
-        "https://releases.nubo.email/{{target}}/{{arch}}/{{current_version}}"
+        "https://github.com/Chandorkar-Technologies/Zero/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"
       }
+    },
+    "store": {
+      "path": ".nubo-settings.json"
+    },
+    "log": {
+      "maxSize": 5242880,
+      "rotation": {
+        "count": 3
+      },
+      "targets": [
+        {
+          "kind": "File",
+          "path": "logs/nubo.log"
+        }
+      ]
     }
   }
 }
