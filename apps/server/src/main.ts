@@ -161,6 +161,10 @@ export class DbRpcDO extends RpcTarget {
     updatingInfo: {
       expiresAt: Date;
       scope: string;
+      accessToken?: string;
+      refreshToken?: string;
+      name?: string;
+      picture?: string;
     },
   ): Promise<{ id: string }[]> {
     return await this.mainDo.createConnection(providerId, email, this.userId, updatingInfo);
@@ -680,6 +684,10 @@ class ZeroDB extends DurableObject<ZeroEnv> {
     updatingInfo: {
       expiresAt: Date;
       scope: string;
+      accessToken?: string;
+      refreshToken?: string;
+      name?: string;
+      picture?: string;
     },
   ): Promise<{ id: string }[]> {
     return await this.db

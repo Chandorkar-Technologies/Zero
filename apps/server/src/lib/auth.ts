@@ -127,10 +127,11 @@ const connectionHandlerHook = async (account: Account) => {
     },
   });
 
-  const userInfo = await driver.getUserInfo().catch(async () => {
+  const userInfo = await driver.getUserInfo().catch(async (error) => {
+    console.error('getUserInfo failed for provider:', account.providerId, 'Error:', error?.message || error);
     if (account.accessToken) {
-      await driver.revokeToken(account.accessToken);
-      await resetConnection(account.id);
+      await driver.revokeToken(account.accessToken).catch((e) => console.error('revokeToken failed:', e));
+      await resetConnection(account.id).catch((e) => console.error('resetConnection failed:', e));
     }
     throw new Response(null, { status: 301, headers: { Location: '/' } });
   });

@@ -134,10 +134,13 @@ export class OutlookMailManager implements MailManager {
     return this.withErrorHandler(
       'getUserInfo',
       async () => {
+        console.log('[Microsoft] getUserInfo called, fetching /me...');
         const user: User = await this.graphClient
           .api('/me')
           .select('id,displayName,userPrincipalName,mail')
           .get();
+
+        console.log('[Microsoft] getUserInfo response:', JSON.stringify(user, null, 2));
 
         let photoUrl = '';
         try {
@@ -155,6 +158,7 @@ export class OutlookMailManager implements MailManager {
           photo: photoUrl,
         };
 
+        console.log('[Microsoft] getUserInfo returning:', JSON.stringify(info));
         return info;
       },
       {},
