@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,6 +17,8 @@ import {
   HardDrive,
   Clock,
   User,
+  Pencil,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -57,6 +59,23 @@ function formatSize(bytes: number): string {
   return `${(bytes / k ** i).toFixed(1)} ${sizes[i]}`;
 }
 
+// Helper to get file extension
+function getFileExtension(filename: string): string {
+  const parts = filename.split('.');
+  return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
+}
+
+// Helper to check if file is editable in OnlyOffice
+function isEditableInOnlyOffice(filename: string): boolean {
+  const ext = getFileExtension(filename);
+  const editableExtensions = [
+    'doc', 'docx', 'odt', 'rtf', 'txt',
+    'xls', 'xlsx', 'ods', 'csv',
+    'ppt', 'pptx', 'odp',
+  ];
+  return editableExtensions.includes(ext);
+}
+
 interface ShareInfo {
   id: string;
   type: 'file' | 'folder';
@@ -86,8 +105,13 @@ export default function SharedFilePage() {
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
+  const [_editorConfig, setEditorConfig] = useState<any>(null);
+  const [editorLoading, setEditorLoading] = useState(false);
+  const editorRef = useRef<any>(null);
 
   const backendUrl = import.meta.env.VITE_PUBLIC_BACKEND_URL || '';
+  const onlyOfficeUrl = import.meta.env.VITE_ONLYOFFICE_URL || 'https://office.nubo.email';
 
   useEffect(() => {
     const fetchShareInfo = async () => {
@@ -130,11 +154,54 @@ export default function SharedFilePage() {
     setShowPreview(true);
   };
 
+  const handleEdit = async () => {
+    if (!token || !shareInfo?.file) return;
+
+    setEditorLoading(true);
+    try {
+      // Fetch editor config for shared file
+      const response = await fetch(`${backendUrl}/api/drive/shared/${token}/editor`);
+      if (!response.ok) {
+        throw new Error('Failed to load editor');
+      }
+      const data = await response.json();
+      setEditorConfig(data);
+      setShowEditor(true);
+
+      // Load OnlyOffice script
+      const script = document.createElement('script');
+      script.src = `${onlyOfficeUrl}/web-apps/apps/api/documents/api.js`;
+      script.async = true;
+      script.onload = () => {
+        if (window.DocsAPI && data.config) {
+          editorRef.current = new window.DocsAPI.DocEditor('shared-editor', data.config);
+        }
+      };
+      document.body.appendChild(script);
+    } catch (err) {
+      console.error('Error loading editor:', err);
+    } finally {
+      setEditorLoading(false);
+    }
+  };
+
+  const handleCloseEditor = () => {
+    if (editorRef.current) {
+      editorRef.current.destroyEditor();
+      editorRef.current = null;
+    }
+    setShowEditor(false);
+    setEditorConfig(null);
+  };
+
   const isPreviewable = shareInfo?.file?.mimeType && (
     shareInfo.file.mimeType.startsWith('image/') ||
     shareInfo.file.mimeType === 'application/pdf' ||
     shareInfo.file.mimeType.startsWith('video/')
   );
+
+  const isEditable = shareInfo?.file?.name && isEditableInOnlyOffice(shareInfo.file.name);
+  const canEdit = shareInfo?.accessLevel === 'edit' && isEditable;
 
   if (loading) {
     return (
@@ -183,42 +250,88 @@ export default function SharedFilePage() {
       {/* Content */}
       <main className="flex-1 p-4">
         <div className="mx-auto max-w-4xl">
-          {/* Preview Modal */}
+          {/* Full Screen Preview Modal */}
           {showPreview && previewUrl && shareInfo.file && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
-              <div className="relative max-h-[90vh] max-w-[90vw] overflow-auto rounded-lg bg-background p-4">
+            <div className="fixed inset-0 z-50 flex flex-col bg-black/95">
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3 bg-black/50 border-b border-white/10">
+                <div className="flex items-center gap-3 text-white">
+                  <Eye className="h-5 w-5" />
+                  <span className="font-medium truncate max-w-md">{shareInfo.file.name}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/10"
+                    onClick={handleDownload}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-white hover:bg-white/10"
+                    onClick={() => setShowPreview(false)}
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
+              </div>
+              {/* Content */}
+              <div className="flex-1 flex items-center justify-center overflow-auto p-4">
+                {shareInfo.file.mimeType.startsWith('image/') ? (
+                  <img
+                    src={previewUrl}
+                    alt={shareInfo.file.name}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                ) : shareInfo.file.mimeType === 'application/pdf' ? (
+                  <iframe
+                    src={previewUrl}
+                    className="w-full h-full bg-white rounded-lg"
+                    title={shareInfo.file.name}
+                  />
+                ) : shareInfo.file.mimeType.startsWith('video/') ? (
+                  <video
+                    src={previewUrl}
+                    controls
+                    autoPlay={false}
+                    className="max-w-full max-h-full"
+                  >
+                    Your browser does not support video playback.
+                  </video>
+                ) : null}
+              </div>
+            </div>
+          )}
+
+          {/* Full Screen Editor Modal */}
+          {showEditor && (
+            <div className="fixed inset-0 z-50 flex flex-col bg-background">
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b">
+                <div className="flex items-center gap-3">
+                  <Pencil className="h-5 w-5" />
+                  <span className="font-medium truncate max-w-md">{shareInfo?.file?.name}</span>
+                </div>
                 <Button
                   variant="ghost"
-                  size="sm"
-                  className="absolute right-2 top-2"
-                  onClick={() => setShowPreview(false)}
+                  size="icon"
+                  onClick={handleCloseEditor}
                 >
-                  Close
+                  <X className="h-5 w-5" />
                 </Button>
-                <div className="mt-8">
-                  {shareInfo.file.mimeType.startsWith('image/') ? (
-                    <img
-                      src={previewUrl}
-                      alt={shareInfo.file.name}
-                      className="max-h-[80vh] max-w-full object-contain"
-                    />
-                  ) : shareInfo.file.mimeType === 'application/pdf' ? (
-                    <iframe
-                      src={previewUrl}
-                      className="h-[80vh] w-[80vw]"
-                      title={shareInfo.file.name}
-                    />
-                  ) : shareInfo.file.mimeType.startsWith('video/') ? (
-                    <video
-                      src={previewUrl}
-                      controls
-                      autoPlay={false}
-                      className="max-h-[80vh] max-w-full"
-                    >
-                      Your browser does not support video playback.
-                    </video>
-                  ) : null}
-                </div>
+              </div>
+              {/* Editor Container */}
+              <div className="flex-1" id="shared-editor">
+                {editorLoading && (
+                  <div className="flex items-center justify-center h-full">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    <span className="ml-2 text-muted-foreground">Loading editor...</span>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -269,13 +382,23 @@ export default function SharedFilePage() {
               {/* Actions */}
               {shareInfo.type === 'file' && (
                 <div className="mt-8 flex gap-3">
+                  {canEdit && (
+                    <Button onClick={handleEdit} disabled={editorLoading}>
+                      {editorLoading ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Pencil className="mr-2 h-4 w-4" />
+                      )}
+                      Edit
+                    </Button>
+                  )}
                   {isPreviewable && (
                     <Button variant="outline" onClick={handlePreview}>
                       <Eye className="mr-2 h-4 w-4" />
                       Preview
                     </Button>
                   )}
-                  <Button onClick={handleDownload}>
+                  <Button variant={canEdit ? 'outline' : 'default'} onClick={handleDownload}>
                     <Download className="mr-2 h-4 w-4" />
                     Download
                   </Button>

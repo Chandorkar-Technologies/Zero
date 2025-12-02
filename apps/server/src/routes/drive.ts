@@ -1,9 +1,27 @@
 import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { createDb } from '../db';
-import { driveFile, driveFolder } from '../db/schema';
+import { driveFile, driveFolder, driveShare } from '../db/schema';
 import { env } from '../env';
 import type { HonoContext } from '../ctx';
+import jwt from '@tsndr/cloudflare-worker-jwt';
+
+// Helper to get file extension
+function getFileExtension(filename: string): string {
+  const parts = filename.split('.');
+  return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
+}
+
+// Helper to check if file is editable in OnlyOffice
+function isEditableInOnlyOffice(filename: string): boolean {
+  const ext = getFileExtension(filename);
+  const editableExtensions = [
+    'doc', 'docx', 'odt', 'rtf', 'txt',
+    'xls', 'xlsx', 'ods', 'csv',
+    'ppt', 'pptx', 'odp',
+  ];
+  return editableExtensions.includes(ext);
+}
 
 export const driveApiRouter = new Hono<HonoContext>();
 
@@ -125,6 +143,10 @@ driveApiRouter.get('/file/:fileId/content', async (c) => {
   const fileId = c.req.param('fileId');
   // For OnlyOffice, we might need to accept a token in query params
   const _token = c.req.query('token') || c.req.header('Authorization')?.replace('Bearer ', '');
+  // Version parameter to bust cache
+  const requestedVersion = c.req.query('v');
+
+  console.log(`[Drive Content] Fetching file content for fileId: ${fileId}, requestedVersion: ${requestedVersion}`);
 
   const { db, conn } = createDb(env.HYPERDRIVE.connectionString);
 
@@ -134,27 +156,50 @@ driveApiRouter.get('/file/:fileId/content', async (c) => {
     });
 
     if (!file) {
+      console.error(`[Drive Content] File not found: ${fileId}`);
       return c.json({ error: 'File not found' }, 404);
     }
+
+    const fileVersion = file.updatedAt.getTime().toString();
+    console.log(`[Drive Content] Found file: ${file.name}, r2Key: ${file.r2Key}, dbVersion: ${fileVersion}, dbSize: ${file.size}`);
 
     const bucket = env.DRIVE_BUCKET;
     const object = await bucket.get(file.r2Key);
 
     if (!object) {
+      console.error(`[Drive Content] File not found in R2: ${file.r2Key}`);
       return c.json({ error: 'File not found in storage' }, 404);
+    }
+
+    // Use actual R2 object size to avoid content-length mismatches
+    // This is critical for OnlyOffice to avoid "version changed" errors
+    const actualSize = object.size;
+    console.log(`[Drive Content] R2 object size: ${actualSize}, DB size: ${file.size}, match: ${actualSize === file.size}`);
+
+    // Log size mismatch but don't update DB here - this can happen during active editing
+    // when forcesave has saved new content to R2 but we haven't updated DB metadata yet
+    // Updating DB here would cause issues with document key consistency
+    if (actualSize !== file.size) {
+      console.warn(`[Drive Content] Size mismatch detected! R2: ${actualSize}, DB: ${file.size}. This is expected during editing with forcesave.`);
     }
 
     const headers = new Headers();
     headers.set('Content-Type', file.mimeType);
-    headers.set('Content-Length', file.size.toString());
+    // CRITICAL: Use actual R2 size, not database size
+    headers.set('Content-Length', actualSize.toString());
     // CORS headers for OnlyOffice
     headers.set('Access-Control-Allow-Origin', '*');
-    // Disable caching to prevent version mismatch issues with OnlyOffice
-    headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    // Disable caching completely to prevent version mismatch issues with OnlyOffice
+    headers.set('Cache-Control', 'private, no-cache, no-store, must-revalidate, max-age=0');
     headers.set('Pragma', 'no-cache');
     headers.set('Expires', '0');
-    // Add ETag for version tracking
-    headers.set('ETag', `"${file.id}-${file.updatedAt.getTime()}"`);
+    // Add ETag and Last-Modified for version tracking
+    headers.set('ETag', `"${file.id}-${fileVersion}-${actualSize}"`);
+    headers.set('Last-Modified', file.updatedAt.toUTCString());
+    // Vary header to prevent CDN caching different versions for same URL
+    headers.set('Vary', '*');
+
+    console.log(`[Drive Content] Returning file content, actualSize: ${actualSize}, mimeType: ${file.mimeType}`);
 
     return new Response(object.body, { headers });
   } finally {
@@ -166,9 +211,9 @@ driveApiRouter.get('/file/:fileId/content', async (c) => {
 driveApiRouter.post('/onlyoffice/callback', async (c) => {
   try {
     const body = await c.req.json();
-    console.log('[OnlyOffice Callback]', JSON.stringify(body));
+    console.log('[OnlyOffice Callback] Received:', JSON.stringify(body));
 
-    const { status, key, url } = body;
+    const { status, key, url, users, actions, forcesavetype } = body;
 
     // Status codes:
     // 0 - no document with the key identifier could be found
@@ -179,10 +224,19 @@ driveApiRouter.post('/onlyoffice/callback', async (c) => {
     // 6 - document is being edited, but the current document state is saved
     // 7 - error has occurred while force saving the document
 
-    if (status === 2 || status === 6) {
+    console.log(`[OnlyOffice Callback] Status: ${status}, Key: ${key}, Users: ${JSON.stringify(users)}, Actions: ${JSON.stringify(actions)}, ForceSaveType: ${forcesavetype}`);
+
+    // Status 2: Document closed and ready for saving
+    // Note: Forcesave (status 6) is disabled in our config because it causes version mismatch errors.
+    // When forcesave writes to R2, OnlyOffice re-fetches the URL and sees the changed content,
+    // incorrectly thinking someone else modified the file.
+    if (status === 2) {
       // Document is ready for saving - download and update R2
-      // Key format: {fileId}-{timestamp}
-      const fileId = key.split('-')[0];
+      // Key format: {fileId}-{updatedAt}
+      // fileId is a UUID (36 chars including hyphens): xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+      const fileId = key.substring(0, 36);
+
+      console.log(`[OnlyOffice Callback] Saving document for fileId: ${fileId}`);
 
       const { db, conn } = createDb(env.HYPERDRIVE.connectionString);
 
@@ -196,14 +250,18 @@ driveApiRouter.post('/onlyoffice/callback', async (c) => {
           return c.json({ error: 0 }); // Return 0 to indicate error to OnlyOffice
         }
 
+        console.log(`[OnlyOffice Callback] Found file: ${file.name}, r2Key: ${file.r2Key}`);
+
         // Download the edited document from OnlyOffice
+        console.log(`[OnlyOffice Callback] Downloading from: ${url}`);
         const response = await fetch(url);
         if (!response.ok) {
-          console.error(`[OnlyOffice Callback] Failed to download document: ${response.status}`);
+          console.error(`[OnlyOffice Callback] Failed to download document: ${response.status} - ${await response.text()}`);
           return c.json({ error: 0 });
         }
 
         const content = await response.arrayBuffer();
+        console.log(`[OnlyOffice Callback] Downloaded ${content.byteLength} bytes`);
 
         // Update file in R2
         const bucket = env.DRIVE_BUCKET;
@@ -213,19 +271,26 @@ driveApiRouter.post('/onlyoffice/callback', async (c) => {
           },
         });
 
+        console.log(`[OnlyOffice Callback] Uploaded to R2: ${file.r2Key}`);
+
         // Update file metadata
+        const newUpdatedAt = new Date();
         await db
           .update(driveFile)
           .set({
             size: content.byteLength,
-            updatedAt: new Date(),
+            updatedAt: newUpdatedAt,
           })
           .where(eq(driveFile.id, fileId));
 
-        console.log(`[OnlyOffice Callback] File saved: ${fileId}`);
+        console.log(`[OnlyOffice Callback] File metadata updated: ${fileId}, new size: ${content.byteLength}, new updatedAt: ${newUpdatedAt.toISOString()}`);
       } finally {
         await conn.end();
       }
+    } else if (status === 4) {
+      console.log(`[OnlyOffice Callback] Document closed with no changes, key: ${key}`);
+    } else {
+      console.log(`[OnlyOffice Callback] Received status ${status}, no action needed`);
     }
 
     // Return 0 to indicate success to OnlyOffice
@@ -264,9 +329,6 @@ driveApiRouter.get('/shared/:token', async (c) => {
   const { db, conn } = createDb(env.HYPERDRIVE.connectionString);
 
   try {
-    // Import driveShare table
-    const { driveShare } = await import('../db/schema');
-
     // Find the share by token
     const share = await db.query.driveShare.findFirst({
       where: eq(driveShare.shareToken, token),
@@ -327,8 +389,6 @@ driveApiRouter.get('/shared/:token/download', async (c) => {
   const { db, conn } = createDb(env.HYPERDRIVE.connectionString);
 
   try {
-    const { driveShare } = await import('../db/schema');
-
     // Find the share by token
     const share = await db.query.driveShare.findFirst({
       where: eq(driveShare.shareToken, token),
@@ -380,8 +440,6 @@ driveApiRouter.get('/shared/:token/preview', async (c) => {
   const { db, conn } = createDb(env.HYPERDRIVE.connectionString);
 
   try {
-    const { driveShare } = await import('../db/schema');
-
     // Find the share by token
     const share = await db.query.driveShare.findFirst({
       where: eq(driveShare.shareToken, token),
@@ -426,4 +484,287 @@ driveApiRouter.get('/shared/:token/preview', async (c) => {
   } finally {
     await conn.end();
   }
+});
+
+// Public endpoint to get file content for shared files (used by OnlyOffice)
+driveApiRouter.get('/shared/:token/content', async (c) => {
+  const token = c.req.param('token');
+
+  const { db, conn } = createDb(env.HYPERDRIVE.connectionString);
+
+  try {
+    // Find the share by token
+    const share = await db.query.driveShare.findFirst({
+      where: eq(driveShare.shareToken, token),
+      with: {
+        file: true,
+      },
+    });
+
+    if (!share) {
+      return c.json({ error: 'Share not found' }, 404);
+    }
+
+    // Check if share has expired
+    if (share.expiresAt && new Date(share.expiresAt) < new Date()) {
+      return c.json({ error: 'This share link has expired' }, 410);
+    }
+
+    if (!share.file) {
+      return c.json({ error: 'Only files can be accessed' }, 400);
+    }
+
+    const file = share.file;
+    const bucket = env.DRIVE_BUCKET;
+    const object = await bucket.get(file.r2Key);
+
+    if (!object) {
+      return c.json({ error: 'File not found in storage' }, 404);
+    }
+
+    const actualSize = object.size;
+    const fileVersion = file.updatedAt.getTime().toString();
+
+    const headers = new Headers();
+    headers.set('Content-Type', file.mimeType);
+    headers.set('Content-Length', actualSize.toString());
+    headers.set('Access-Control-Allow-Origin', '*');
+    headers.set('Cache-Control', 'private, no-cache, no-store, must-revalidate, max-age=0');
+    headers.set('Pragma', 'no-cache');
+    headers.set('Expires', '0');
+    headers.set('ETag', `"${file.id}-${fileVersion}-${actualSize}"`);
+    headers.set('Last-Modified', file.updatedAt.toUTCString());
+    headers.set('Vary', '*');
+
+    return new Response(object.body, { headers });
+  } catch (error) {
+    console.error('[Drive Share] Error getting shared file content:', error);
+    return c.json({ error: 'Failed to get file content' }, 500);
+  } finally {
+    await conn.end();
+  }
+});
+
+// CORS preflight for shared content
+driveApiRouter.options('/shared/:token/content', () => {
+  return new Response(null, {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
+});
+
+// Public endpoint to get OnlyOffice editor config for shared files with edit permission
+driveApiRouter.get('/shared/:token/editor', async (c) => {
+  const token = c.req.param('token');
+
+  const { db, conn } = createDb(env.HYPERDRIVE.connectionString);
+
+  try {
+    // Find the share by token with file and owner info
+    const share = await db.query.driveShare.findFirst({
+      where: eq(driveShare.shareToken, token),
+      with: {
+        file: true,
+        owner: {
+          columns: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!share) {
+      return c.json({ error: 'Share not found' }, 404);
+    }
+
+    // Check if share has expired
+    if (share.expiresAt && new Date(share.expiresAt) < new Date()) {
+      return c.json({ error: 'This share link has expired' }, 410);
+    }
+
+    // Check if share has edit permission
+    if (share.accessLevel !== 'edit') {
+      return c.json({ error: 'This share does not have edit permission' }, 403);
+    }
+
+    if (!share.file) {
+      return c.json({ error: 'Only files can be edited' }, 400);
+    }
+
+    const file = share.file;
+
+    // Check if file type is editable
+    if (!isEditableInOnlyOffice(file.name)) {
+      return c.json({ error: 'This file type cannot be edited' }, 400);
+    }
+
+    const onlyOfficeUrl = env.ONLYOFFICE_URL || 'https://office.nubo.email';
+    const jwtSecret = env.ONLYOFFICE_JWT_SECRET;
+    const backendUrl = env.VITE_PUBLIC_BACKEND_URL;
+
+    if (!jwtSecret) {
+      console.error('[Drive Share Editor] OnlyOffice JWT secret not configured');
+      return c.json({ error: 'Editor not configured' }, 500);
+    }
+
+    const ext = getFileExtension(file.name);
+    const documentType = ['doc', 'docx', 'odt', 'rtf', 'txt'].includes(ext)
+      ? 'word'
+      : ['xls', 'xlsx', 'ods', 'csv'].includes(ext)
+        ? 'cell'
+        : ['ppt', 'pptx', 'odp'].includes(ext)
+          ? 'slide'
+          : 'word';
+
+    // Generate document key for OnlyOffice
+    const documentKey = `${file.id}-${file.updatedAt.getTime()}`;
+
+    // OnlyOffice Document Server configuration
+    const config = {
+      document: {
+        fileType: ext,
+        key: documentKey,
+        title: file.name,
+        // Use the shared content endpoint
+        url: `${backendUrl}/api/drive/shared/${token}/content`,
+      },
+      documentType,
+      editorConfig: {
+        // Use a special callback URL that includes the share token
+        callbackUrl: `${backendUrl}/api/drive/shared/${token}/callback`,
+        user: {
+          id: `anonymous-${token.substring(0, 8)}`,
+          name: 'Guest User',
+        },
+        customization: {
+          autosave: false,
+          forcesave: false,
+        },
+      },
+    };
+
+    // Sign the config with JWT
+    const jwtToken = await jwt.sign(config, jwtSecret, { algorithm: 'HS256' });
+
+    return c.json({
+      config: {
+        ...config,
+        token: jwtToken,
+      },
+      onlyOfficeUrl,
+    });
+  } catch (error) {
+    console.error('[Drive Share Editor] Error getting editor config:', error);
+    return c.json({ error: 'Failed to get editor config' }, 500);
+  } finally {
+    await conn.end();
+  }
+});
+
+// OnlyOffice callback endpoint for shared file editing
+driveApiRouter.post('/shared/:token/callback', async (c) => {
+  const token = c.req.param('token');
+
+  try {
+    const body = await c.req.json();
+    console.log('[OnlyOffice Shared Callback] Received:', JSON.stringify(body));
+
+    const { status, url } = body;
+
+    console.log(`[OnlyOffice Shared Callback] Status: ${status}, Token: ${token}`);
+
+    // Status 2: Document closed and ready for saving
+    if (status === 2) {
+      const { db, conn } = createDb(env.HYPERDRIVE.connectionString);
+
+      try {
+        // Find the share by token
+        const share = await db.query.driveShare.findFirst({
+          where: eq(driveShare.shareToken, token),
+          with: {
+            file: true,
+          },
+        });
+
+        if (!share) {
+          console.error(`[OnlyOffice Shared Callback] Share not found: ${token}`);
+          return c.json({ error: 0 });
+        }
+
+        // Check if share has edit permission
+        if (share.accessLevel !== 'edit') {
+          console.error(`[OnlyOffice Shared Callback] Share does not have edit permission: ${token}`);
+          return c.json({ error: 0 });
+        }
+
+        if (!share.file) {
+          console.error(`[OnlyOffice Shared Callback] No file associated with share: ${token}`);
+          return c.json({ error: 0 });
+        }
+
+        const file = share.file;
+
+        console.log(`[OnlyOffice Shared Callback] Saving document for file: ${file.name}`);
+
+        // Download the edited document from OnlyOffice
+        console.log(`[OnlyOffice Shared Callback] Downloading from: ${url}`);
+        const response = await fetch(url);
+        if (!response.ok) {
+          console.error(`[OnlyOffice Shared Callback] Failed to download document: ${response.status}`);
+          return c.json({ error: 0 });
+        }
+
+        const content = await response.arrayBuffer();
+        console.log(`[OnlyOffice Shared Callback] Downloaded ${content.byteLength} bytes`);
+
+        // Update file in R2
+        const bucket = env.DRIVE_BUCKET;
+        await bucket.put(file.r2Key, content, {
+          httpMetadata: {
+            contentType: file.mimeType,
+          },
+        });
+
+        console.log(`[OnlyOffice Shared Callback] Uploaded to R2: ${file.r2Key}`);
+
+        // Update file metadata
+        const newUpdatedAt = new Date();
+        await db
+          .update(driveFile)
+          .set({
+            size: content.byteLength,
+            updatedAt: newUpdatedAt,
+          })
+          .where(eq(driveFile.id, file.id));
+
+        console.log(`[OnlyOffice Shared Callback] File metadata updated: ${file.id}`);
+      } finally {
+        await conn.end();
+      }
+    } else if (status === 4) {
+      console.log(`[OnlyOffice Shared Callback] Document closed with no changes`);
+    } else {
+      console.log(`[OnlyOffice Shared Callback] Received status ${status}, no action needed`);
+    }
+
+    return c.json({ error: 0 });
+  } catch (error) {
+    console.error('[OnlyOffice Shared Callback] Error:', error);
+    return c.json({ error: 1 });
+  }
+});
+
+// CORS preflight for shared callback
+driveApiRouter.options('/shared/:token/callback', () => {
+  return new Response(null, {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
 });

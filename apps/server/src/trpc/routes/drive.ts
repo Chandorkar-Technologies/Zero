@@ -669,10 +669,15 @@ export const driveRouter = router({
             ? 'slide'
             : 'word';
 
-      // Generate unique key for this editing session - this MUST change when file is modified
-      // OnlyOffice uses this key to cache documents, so a unique key forces a fresh load
-      const timestamp = file.updatedAt.getTime();
-      const documentKey = `${file.id}-${timestamp}`;
+      // Generate document key for OnlyOffice
+      //
+      // OnlyOffice uses this key to identify document versions.
+      // Using fileId + updatedAt ensures:
+      // - Same key during an editing session (if user saves and keeps editing)
+      // - New key when reopening after save (updatedAt changed)
+      //
+      // This approach means each "version" of the document gets its own key.
+      const documentKey = `${file.id}-${file.updatedAt.getTime()}`;
 
       // OnlyOffice Document Server configuration
       const config = {
@@ -680,8 +685,9 @@ export const driveRouter = router({
           fileType: ext,
           key: documentKey,
           title: file.name,
-          // Add cache-busting parameter to ensure fresh content is loaded
-          url: `${backendUrl}/api/drive/file/${file.id}/content?v=${timestamp}`,
+          // No cache-busting params needed - OnlyOffice handles caching based on document key
+          // Adding timestamp params can cause issues if they change between requests
+          url: `${backendUrl}/api/drive/file/${file.id}/content`,
         },
         documentType,
         editorConfig: {
@@ -691,8 +697,17 @@ export const driveRouter = router({
             name: sessionUser.name || sessionUser.email,
           },
           customization: {
-            autosave: true,
-            forcesave: true,
+            // IMPORTANT: Forcesave is disabled because it causes version mismatch errors.
+            // When forcesave is enabled, OnlyOffice sends status 6 callbacks which write
+            // new content to R2. But OnlyOffice also re-fetches the document URL to check
+            // for external changes. When it sees the new content (that it just saved),
+            // it incorrectly thinks someone else modified the file and shows a version
+            // mismatch error.
+            //
+            // With forcesave disabled, documents are only saved when the editor is closed
+            // (status 2), which is when the document key will change anyway.
+            autosave: false,
+            forcesave: false,
           },
         },
       };

@@ -58,6 +58,7 @@ import {
   Share2,
   Link2,
   Users,
+  AtSign,
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
@@ -236,6 +237,13 @@ export default function DrivePage() {
   const { data: sharedWithMe, isLoading: sharedLoading } = useQuery(
     trpc.drive.getSharedWithMe.queryOptions(undefined, {
       enabled: filter === 'shared',
+    }),
+  );
+
+  // Query for current user's Nubo username
+  const { data: myUsername } = useQuery(
+    trpc.drive.getMyUsername.queryOptions(void 0, {
+      retry: false,
     }),
   );
 
@@ -1925,82 +1933,86 @@ export default function DrivePage() {
         </DialogContent>
       </Dialog>
 
-      {/* Preview Dialog */}
-      <Dialog open={!!previewFile} onOpenChange={() => handleClosePreview()}>
-        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+      {/* Full Screen Preview Overlay */}
+      {previewFile && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/95">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 bg-black/50 border-b border-white/10">
+            <div className="flex items-center gap-3 text-white">
               <Eye className="h-5 w-5" />
-              {previewFile?.name}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 min-h-0 overflow-auto bg-muted/30 rounded-lg">
+              <span className="font-medium truncate max-w-md">{previewFile.name}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-white/10"
+                onClick={() => handleDownload(previewFile.id, previewFile.name)}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white hover:bg-white/10"
+                onClick={handleClosePreview}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+          {/* Content */}
+          <div className="flex-1 flex items-center justify-center overflow-auto p-4">
             {previewLoading ? (
-              <div className="flex items-center justify-center py-24">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                <span className="ml-2 text-muted-foreground">Loading preview...</span>
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="h-10 w-10 animate-spin text-white/60" />
+                <span className="text-white/60">Loading preview...</span>
               </div>
             ) : previewFile?.data || previewFile?.url ? (
               previewFile.type === 'image' || previewFile.mimeType.startsWith('image/') ? (
-                <div className="flex items-center justify-center p-4">
-                  <img
-                    src={`data:${previewFile.mimeType};base64,${previewFile.data}`}
-                    alt={previewFile.name}
-                    className="max-w-full max-h-[70vh] object-contain"
-                  />
-                </div>
+                <img
+                  src={`data:${previewFile.mimeType};base64,${previewFile.data}`}
+                  alt={previewFile.name}
+                  className="max-w-full max-h-full object-contain"
+                />
               ) : previewFile.type === 'pdf' || previewFile.mimeType === 'application/pdf' ? (
                 <iframe
                   src={`data:application/pdf;base64,${previewFile.data}`}
-                  className="w-full h-[70vh]"
+                  className="w-full h-full bg-white rounded-lg"
                   title={previewFile.name}
                 />
               ) : previewFile.type === 'video' ? (
-                <div className="flex items-center justify-center p-4">
-                  <video
-                    controls
-                    autoPlay={false}
-                    className="max-w-full max-h-[70vh]"
-                    src={`data:${previewFile.mimeType};base64,${previewFile.data}`}
-                  >
-                    Your browser does not support the video tag.
-                  </video>
-                </div>
+                <video
+                  controls
+                  autoPlay={false}
+                  className="max-w-full max-h-full"
+                  src={`data:${previewFile.mimeType};base64,${previewFile.data}`}
+                >
+                  Your browser does not support the video tag.
+                </video>
               ) : previewFile.type === 'video_url' && previewFile.url ? (
-                <div className="flex items-center justify-center p-4">
-                  <video
-                    controls
-                    autoPlay={false}
-                    className="max-w-full max-h-[70vh]"
-                    src={previewFile.url}
-                  >
-                    Your browser does not support the video tag.
-                  </video>
-                </div>
+                <video
+                  controls
+                  autoPlay={false}
+                  className="max-w-full max-h-full"
+                  src={previewFile.url}
+                >
+                  Your browser does not support the video tag.
+                </video>
               ) : (
-                <div className="flex items-center justify-center py-24 text-muted-foreground">
+                <div className="text-white/60">
                   Preview not available for this file type
                 </div>
               )
             ) : (
-              <div className="flex items-center justify-center py-24 text-muted-foreground">
+              <div className="text-white/60">
                 Failed to load preview
               </div>
             )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={handleClosePreview}>
-              Close
-            </Button>
-            {previewFile && (
-              <Button onClick={() => handleDownload(previewFile.id, previewFile.name)}>
-                <Download className="mr-2 h-4 w-4" />
-                Download
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
 
       {/* Share Dialog */}
       <Dialog open={isShareOpen} onOpenChange={setIsShareOpen}>
@@ -2015,6 +2027,19 @@ export default function DrivePage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Your Nubo ID */}
+            {myUsername?.username && (
+              <div className="rounded-lg bg-muted/50 p-3">
+                <div className="flex items-center gap-2">
+                  <AtSign className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">{myUsername.username}@nubo.email</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Your Nubo ID - others can use this to share with you
+                </p>
+              </div>
+            )}
+
             {/* Search users */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Share with user</label>
