@@ -94,9 +94,11 @@ export default function PricingCard() {
     }
 
     if (attach) {
+      // Use actual Razorpay plan IDs
+      const planId = isAnnual ? 'plan_RgNhIPe6xvU6xz' : 'plan_RgNh4LjI4yf8x7';
       toast.promise(
         attach({
-          productId: isAnnual ? 'pro_annual' : 'pro-example',
+          productId: planId,
           successUrl: `${window.location.origin}/mail/inbox?success=true`,
         }),
         {

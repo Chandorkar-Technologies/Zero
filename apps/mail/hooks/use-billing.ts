@@ -314,7 +314,7 @@ export const useBilling = () => {
         enabled: subscription.features.chatMessages > 0 || subscription.features.chatMessages === Infinity,
         usage: 0, // This would need to be fetched from usage tracking
         nextResetAt,
-        interval: subscription.planId === 'pro_annual' ? 'year' : 'month',
+        interval: subscription.planId === 'plan_RgNhIPe6xvU6xz' ? 'year' : 'month',
         included_usage: subscription.features.chatMessages,
       },
       connections: {
@@ -324,7 +324,7 @@ export const useBilling = () => {
         enabled: subscription.features.connections > 0 || subscription.features.connections === Infinity,
         usage: 0, // This would need to be fetched from usage tracking
         nextResetAt,
-        interval: subscription.planId === 'pro_annual' ? 'year' : 'month',
+        interval: subscription.planId === 'plan_RgNhIPe6xvU6xz' ? 'year' : 'month',
         included_usage: subscription.features.connections,
       },
       brainActivity: {
@@ -334,7 +334,7 @@ export const useBilling = () => {
         enabled: subscription.features.brainActivity > 0 || subscription.features.brainActivity === Infinity,
         usage: 0, // This would need to be fetched from usage tracking
         nextResetAt,
-        interval: subscription.planId === 'pro_annual' ? 'year' : 'month',
+        interval: subscription.planId === 'plan_RgNhIPe6xvU6xz' ? 'year' : 'month',
         included_usage: subscription.features.brainActivity,
       },
     };

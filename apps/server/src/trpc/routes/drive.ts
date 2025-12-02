@@ -669,8 +669,10 @@ export const driveRouter = router({
             ? 'slide'
             : 'word';
 
-      // Generate unique key for this editing session
-      const documentKey = `${file.id}-${file.updatedAt.getTime()}`;
+      // Generate unique key for this editing session - this MUST change when file is modified
+      // OnlyOffice uses this key to cache documents, so a unique key forces a fresh load
+      const timestamp = file.updatedAt.getTime();
+      const documentKey = `${file.id}-${timestamp}`;
 
       // OnlyOffice Document Server configuration
       const config = {
@@ -678,7 +680,8 @@ export const driveRouter = router({
           fileType: ext,
           key: documentKey,
           title: file.name,
-          url: `${backendUrl}/api/drive/file/${file.id}/content`,
+          // Add cache-busting parameter to ensure fresh content is loaded
+          url: `${backendUrl}/api/drive/file/${file.id}/content?v=${timestamp}`,
         },
         documentType,
         editorConfig: {

@@ -207,14 +207,16 @@ export default function DrivePage() {
   }, [searchParams]);
 
   // Queries
-  const { data: contents, isLoading, error } = useQuery(
-    trpc.drive.listContents.queryOptions({
+  const { data: contents, isLoading, error, refetch: refetchContents } = useQuery({
+    ...trpc.drive.listContents.queryOptions({
       folderId: currentFolderId,
       filter,
       sortBy: 'name',
       sortOrder: 'asc',
     }),
-  );
+    refetchOnWindowFocus: true, // Auto-refresh when user returns to tab
+    staleTime: 10000, // Consider data stale after 10 seconds
+  });
 
   // Log error for debugging
   if (error) {
@@ -267,10 +269,13 @@ export default function DrivePage() {
   const importFromOneDriveMutation = useMutation(trpc.drive.importFromOneDrive.mutationOptions());
   const importEntireOneDriveMutation = useMutation(trpc.drive.importEntireOneDrive.mutationOptions());
 
-  // Invalidate queries helper
-  const invalidate = () => {
+  // Invalidate queries helper - refresh all drive data
+  const invalidate = useCallback(() => {
+    // Invalidate all drive-related queries and trigger immediate refetch
     queryClient.invalidateQueries({ queryKey: ['drive'] });
-  };
+    // Also explicitly refetch the current contents
+    refetchContents();
+  }, [queryClient, refetchContents]);
 
   // Handlers
   const handleCreateFolder = async () => {

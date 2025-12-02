@@ -167,6 +167,12 @@ driveApiRouter.get('/file/:fileId/content', async (c) => {
     headers.set('Content-Length', file.size.toString());
     // CORS headers for OnlyOffice
     headers.set('Access-Control-Allow-Origin', '*');
+    // Disable caching to prevent version mismatch issues with OnlyOffice
+    headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    headers.set('Pragma', 'no-cache');
+    headers.set('Expires', '0');
+    // Add ETag for version tracking
+    headers.set('ETag', `"${file.id}-${file.updatedAt.getTime()}"`);
 
     return new Response(object.body, { headers });
   } finally {

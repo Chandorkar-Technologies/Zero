@@ -109,15 +109,16 @@ export function ChatwootProvider({ children }: PropsWithChildren) {
   const openChat = useCallback(() => {
     console.log('[Chatwoot] openChat called, isReady:', isReady, '$chatwoot:', !!window.$chatwoot, 'loadError:', loadError);
 
+    const openEmailFallback = () => {
+      window.location.href = `mailto:${SUPPORT_EMAIL}?subject=Support%20Request`;
+      toast.info('Opening email client', {
+        description: `Sending support request to ${SUPPORT_EMAIL}`,
+      });
+    };
+
     // If we know it failed to load, show fallback immediately
     if (loadError) {
-      toast.info('Live chat is unavailable', {
-        description: `Please email us at ${SUPPORT_EMAIL}`,
-        action: {
-          label: 'Send Email',
-          onClick: () => window.open(`mailto:${SUPPORT_EMAIL}?subject=Support%20Request`, '_blank'),
-        },
-      });
+      openEmailFallback();
       return;
     }
 
@@ -133,13 +134,7 @@ export function ChatwootProvider({ children }: PropsWithChildren) {
         if (attempt > 5) {
           console.error('[Chatwoot] Failed to open after 5 attempts');
           toast.dismiss('chatwoot-loading');
-          toast.info('Live chat is unavailable', {
-            description: `Please email us at ${SUPPORT_EMAIL}`,
-            action: {
-              label: 'Send Email',
-              onClick: () => window.open(`mailto:${SUPPORT_EMAIL}?subject=Support%20Request`, '_blank'),
-            },
-          });
+          openEmailFallback();
           setLoadError(true);
           return;
         }
