@@ -1,0 +1,124 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nubo-webhooks",
+  "compatibility_date": "2024-11-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "src/workers/webhooks.ts",
+  "triggers": {
+    "crons": ["0 0 * * *", "0 * * * *"]
+  },
+  "limits": {
+    "cpu_ms": 300000
+  },
+  "r2_buckets": [
+    {
+      "binding": "THREADS_BUCKET",
+      "bucket_name": "threads"
+    },
+    {
+      "binding": "RECORDINGS_BUCKET",
+      "bucket_name": "recordings"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "ae4405addb934ccdb006a6e701d725fa"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ZERO_AGENT",
+        "class_name": "ZeroAgent",
+        "script_name": "nubo-trpc"
+      },
+      {
+        "name": "WORKFLOW_RUNNER",
+        "class_name": "WorkflowRunner",
+        "script_name": "nubo-trpc"
+      }
+    ]
+  },
+  "queues": {
+    "producers": [
+      {
+        "queue": "thread-queue-prod",
+        "binding": "thread_queue"
+      },
+      {
+        "queue": "subscribe-queue-prod",
+        "binding": "subscribe_queue"
+      },
+      {
+        "queue": "send-email-queue-prod",
+        "binding": "send_email_queue"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "subscribe-queue-prod"
+      },
+      {
+        "queue": "thread-queue-prod"
+      },
+      {
+        "queue": "send-email-queue-prod"
+      }
+    ]
+  },
+  "vars": {
+    "NODE_ENV": "production",
+    "COOKIE_DOMAIN": ".nubo.email",
+    "VITE_PUBLIC_BACKEND_URL": "https://api.nubo.email",
+    "VITE_PUBLIC_APP_URL": "https://nubo.email",
+    "DISABLE_WORKFLOWS": "false",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://api.axiom.co/v1/traces",
+    "OTEL_SERVICE_NAME": "zero-email-server-production"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "gmail_history_id",
+      "id": "e4075a6831b74bd9898a8bdfa0124b3b"
+    },
+    {
+      "binding": "gmail_processing_threads",
+      "id": "8be4d7e8d6494da1858941867c2a5179"
+    },
+    {
+      "binding": "subscribed_accounts",
+      "id": "296e90acb48b451780fcb6f6685ff3d2"
+    },
+    {
+      "binding": "connection_labels",
+      "id": "477037f0ee10480f9877c5b0bc867c24"
+    },
+    {
+      "binding": "prompts_storage",
+      "id": "e7ecf40058d24f22bec0e51b474605f0"
+    },
+    {
+      "binding": "gmail_sub_age",
+      "id": "33956af98228422fa7fdf4fd1183fee9"
+    },
+    {
+      "binding": "pending_emails_status",
+      "id": "2e1bd5e91c2a4d749c0bcb0e6cb673c8"
+    },
+    {
+      "binding": "pending_emails_payload",
+      "id": "6dfc2784c2724540b4fbe42db0a53eed"
+    },
+    {
+      "binding": "scheduled_emails",
+      "id": "4db4a8f3ee2448c3b307bc9d8e698437"
+    },
+    {
+      "binding": "snoozed_emails",
+      "id": "f9469389ca82434095459b2d34800474"
+    }
+  ]
+}

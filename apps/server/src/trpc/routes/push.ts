@@ -1,12 +1,16 @@
 import { privateProcedure, publicProcedure, router } from '../trpc';
+import { sendPushNotification } from '../../lib/web-push';
 import { pushSubscription } from '../../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
 import { env } from '../../env';
 
+console.log('[PushRouter] Module loaded');
+
 export const pushRouter = router({
   // Get VAPID public key for client-side subscription
   getVapidPublicKey: publicProcedure.query(() => {
+    console.log('[PushRouter] getVapidPublicKey called');
     return {
       publicKey: env.VAPID_PUBLIC_KEY || null,
     };
@@ -188,6 +192,89 @@ export const pushRouter = router({
           ),
         );
 
+      return { success: true };
+    }),
+
+  // Send a test notification to a specific subscription
+  sendTestNotification: privateProcedure
+    .input(
+      z.object({
+        subscriptionId: z.string(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      console.log('[sendTestNotification] Starting...');
+      const { sessionUser, db } = ctx;
+
+      console.log('[sendTestNotification] User:', sessionUser.id, 'SubId:', input.subscriptionId);
+
+      // Get the subscription
+      const [subscription] = await db
+        .select()
+        .from(pushSubscription)
+        .where(
+          and(
+            eq(pushSubscription.id, input.subscriptionId),
+            eq(pushSubscription.userId, sessionUser.id),
+          ),
+        )
+        .limit(1);
+
+      console.log('[sendTestNotification] Subscription found:', !!subscription);
+      console.log('[sendTestNotification] Subscription data:', JSON.stringify({
+        id: subscription?.id,
+        endpoint: subscription?.endpoint?.substring(0, 50),
+        hasP256dh: !!subscription?.p256dh,
+        hasAuth: !!subscription?.auth,
+      }));
+
+      if (!subscription) {
+        console.log('[sendTestNotification] Subscription not found!');
+        throw new Error('Subscription not found');
+      }
+
+      // Validate subscription has required fields
+      if (!subscription.endpoint) {
+        console.log('[sendTestNotification] Subscription endpoint is missing!');
+        throw new Error('Subscription endpoint is missing');
+      }
+      if (!subscription.p256dh) {
+        console.log('[sendTestNotification] Subscription p256dh key is missing!');
+        throw new Error('Subscription p256dh key is missing');
+      }
+      if (!subscription.auth) {
+        console.log('[sendTestNotification] Subscription auth key is missing!');
+        throw new Error('Subscription auth key is missing');
+      }
+
+      console.log('[sendTestNotification] Calling sendPushNotification...');
+      console.log('[sendTestNotification] Endpoint:', subscription.endpoint.substring(0, 50) + '...');
+
+      // Send test notification
+      const result = await sendPushNotification(
+        {
+          endpoint: subscription.endpoint,
+          keys: {
+            p256dh: subscription.p256dh,
+            auth: subscription.auth,
+          },
+        },
+        {
+          title: 'Test Notification',
+          body: 'Push notifications are working correctly!',
+          icon: '/icons-pwa/icon-192.png',
+          tag: 'test-notification',
+        },
+      );
+
+      console.log('[sendTestNotification] Result:', JSON.stringify(result));
+
+      if (!result.success) {
+        console.log('[sendTestNotification] Failed:', result.error);
+        throw new Error(result.error || 'Failed to send notification');
+      }
+
+      console.log('[sendTestNotification] Success!');
       return { success: true };
     }),
 });

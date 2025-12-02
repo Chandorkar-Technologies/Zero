@@ -27,6 +27,10 @@
     },
     "production": {
       "name": "zero-production",
+      "routes": [
+        { "pattern": "nubo.email/*", "zone_name": "nubo.email" },
+        { "pattern": "www.nubo.email/*", "zone_name": "nubo.email" }
+      ],
       "vars": {
         "VITE_PUBLIC_BACKEND_URL": "https://api.nubo.email",
         "VITE_PUBLIC_APP_URL": "https://nubo.email",

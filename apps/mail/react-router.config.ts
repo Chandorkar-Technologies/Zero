@@ -7,7 +7,7 @@ export default {
   routeDiscovery: {
     mode: 'initial',
   },
-  prerender: ['/manifest.webmanifest'],
+  prerender: false,
   future: {
     unstable_viteEnvironmentApi: true,
   },

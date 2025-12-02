@@ -94,6 +94,14 @@ export class GoogleMailManager implements MailManager {
 
         const attachmentData = response.data.data || '';
 
+        if (!attachmentData) {
+          console.warn('[GoogleDriver] getAttachment: No attachment data returned', {
+            messageId,
+            attachmentId,
+            responseSize: response.data.size,
+          });
+        }
+
         const base64 = fromBase64Url(attachmentData);
 
         return base64;
@@ -114,15 +122,23 @@ export class GoogleMailManager implements MailManager {
           ? this.findAttachments(res.data.payload.parts)
           : [];
 
+        console.log('[GoogleDriver] getMessageAttachments: Found', attachmentParts.length, 'attachment parts for message', messageId);
+
         const attachments = await Promise.all(
           attachmentParts.map(async (part) => {
             const attachmentId = part.body?.attachmentId;
             if (!attachmentId) {
+              console.log('[GoogleDriver] getMessageAttachments: Part has no attachmentId', { filename: part.filename });
               return null;
             }
 
             try {
               const attachmentData = await this.getAttachment(messageId, attachmentId);
+              console.log('[GoogleDriver] getMessageAttachments: Got attachment data', {
+                filename: part.filename,
+                attachmentId,
+                dataLength: attachmentData?.length || 0,
+              });
               return {
                 filename: part.filename || '',
                 mimeType: part.mimeType || '',
@@ -135,7 +151,8 @@ export class GoogleMailManager implements MailManager {
                   })) ?? [],
                 body: attachmentData ?? '',
               };
-            } catch {
+            } catch (error) {
+              console.error('[GoogleDriver] getMessageAttachments: Error fetching attachment', { filename: part.filename, error });
               return null;
             }
           }),

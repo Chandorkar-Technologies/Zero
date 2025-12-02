@@ -242,12 +242,13 @@ export class ImapMailManager implements MailManager {
             throw new Error('SMTP configuration not found for this IMAP connection. Please reconfigure your email account with SMTP settings.');
         }
 
-        const { smtp, auth } = imapConfig;
+        const { auth } = imapConfig;
         const fromEmail = data.fromEmail || this.config.auth.email || auth.user;
 
-        // Get SMTP service configuration from environment
+// Get SMTP service configuration from environment
         const smtpServiceUrl = env.SMTP_SERVICE_URL;
         const smtpServiceApiKey = env.SMTP_SERVICE_API_KEY;
+        const { smtp } = imapConfig;
 
         if (!smtpServiceUrl || !smtpServiceApiKey) {
             throw new Error('SMTP service not configured. Please set SMTP_SERVICE_URL and SMTP_SERVICE_API_KEY environment variables.');

@@ -117,6 +117,19 @@ export class DB {
         }
     }
 
+    async getConnectionById(connectionId: string) {
+        const client = await this.pool.connect();
+        try {
+            const res = await client.query(
+                `SELECT * FROM "mail0_connection" WHERE "id" = $1`,
+                [connectionId]
+            );
+            return res.rows[0] || null;
+        } finally {
+            client.release();
+        }
+    }
+
     async saveEmailMetadata(email: any) {
         const client = await this.pool.connect();
         try {

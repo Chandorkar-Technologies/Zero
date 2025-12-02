@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, Menu, nativeImage, Tray, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, Menu, nativeImage, Tray, ipcMain, Notification } = require('electron');
 const path = require('path');
 
 // Remote URL - the app loads from this URL so updates are automatic
@@ -293,6 +293,34 @@ function createMenu() {
 ipcMain.on('set-badge-count', (event, count) => {
   if (process.platform === 'darwin') {
     app.dock.setBadge(count > 0 ? String(count) : '');
+  }
+});
+
+// Handle native notifications from web app
+ipcMain.on('show-notification', (event, { title, body, icon, _tag, data }) => {
+  if (Notification.isSupported()) {
+    const notification = new Notification({
+      title: title || 'Nubo',
+      body: body || '',
+      icon: icon || path.join(__dirname, 'resources', 'icon.png'),
+      silent: false,
+    });
+
+    notification.on('click', () => {
+      // Show and focus the main window when notification is clicked
+      if (mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
+        // If there's data with a URL, navigate to it
+        if (data?.url) {
+          mainWindow.webContents.executeJavaScript(`
+            window.location.href = '${data.url}';
+          `);
+        }
+      }
+    });
+
+    notification.show();
   }
 });
 

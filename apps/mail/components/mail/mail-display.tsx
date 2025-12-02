@@ -43,7 +43,7 @@ import { EmailVerificationBadge } from './email-verification-badge';
 import type { Sender, ParsedMessage, Attachment } from '@/types';
 import { useActiveConnection } from '@/hooks/use-connections';
 import { useAttachments } from '@/hooks/use-attachments';
-import { useTRPC } from '@/providers/query-provider';
+import { useTRPC, useTRPCClient } from '@/providers/query-provider';
 import { useThreadLabels } from '@/hooks/use-labels';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Markdown } from '@react-email/components';
@@ -160,7 +160,7 @@ type Props = {
   onReply?: () => void;
   onReplyAll?: () => void;
   onForward?: () => void;
-  threadAttachments?: Attachment[];
+  threadAttachments?: (Attachment & { messageId: string })[];
 };
 
 const MailDisplayLabels = ({ labels }: { labels: string[] }) => {
@@ -257,13 +257,39 @@ const cleanNameDisplay = (name?: string) => {
   return name.trim();
 };
 
-const ThreadAttachments = ({ attachments }: { attachments: Attachment[] }) => {
+const ThreadAttachments = ({ attachments }: { attachments: (Attachment & { messageId: string })[] }) => {
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const trpcClient = useTRPCClient();
+
   if (!attachments || attachments.length === 0) return null;
 
-  const handleDownload = async (attachment: Attachment) => {
+  const handleDownload = async (attachment: Attachment & { messageId: string }) => {
     try {
+      setDownloadingId(attachment.attachmentId);
+
+      // Fetch the attachment data with body from the API
+      const messageAttachments = await trpcClient.mail.getMessageAttachments.query({
+        messageId: attachment.messageId,
+      });
+
+      // Find the specific attachment by ID first, then fallback to filename match
+      let fullAttachment = messageAttachments?.find(
+        (att: Attachment) => att.attachmentId === attachment.attachmentId
+      );
+
+      // Fallback: match by filename if ID doesn't match
+      if (!fullAttachment?.body) {
+        fullAttachment = messageAttachments?.find(
+          (att: Attachment) => att.filename === attachment.filename
+        );
+      }
+
+      if (!fullAttachment?.body) {
+        throw new Error('Attachment data not found');
+      }
+
       // Convert base64 to blob
-      const byteCharacters = atob(attachment.body);
+      const byteCharacters = atob(fullAttachment.body);
       const byteNumbers: number[] = Array(byteCharacters.length);
       for (let i = 0; i < byteCharacters.length; i++) {
         byteNumbers[i] = byteCharacters.charCodeAt(i);
@@ -282,6 +308,9 @@ const ThreadAttachments = ({ attachments }: { attachments: Attachment[] }) => {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error downloading attachment:', error);
+      toast.error('Failed to download attachment');
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -297,9 +326,14 @@ const ThreadAttachments = ({ attachments }: { attachments: Attachment[] }) => {
           <button
             key={`${attachment.attachmentId}-${attachment.filename}`}
             onClick={() => handleDownload(attachment)}
-            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-[#F0F0F0] dark:bg-[#262626] dark:hover:bg-[#303030]"
+            disabled={downloadingId === attachment.attachmentId}
+            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-[#F0F0F0] dark:bg-[#262626] dark:hover:bg-[#303030] disabled:opacity-50"
           >
-            <span className="text-muted-foreground">{getFileIcon(attachment.filename)}</span>
+            {downloadingId === attachment.attachmentId ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <span className="text-muted-foreground">{getFileIcon(attachment.filename)}</span>
+            )}
             <span className="max-w-[200px] truncate" title={attachment.filename}>
               {attachment.filename}
             </span>

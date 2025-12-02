@@ -24,7 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { m } from '@/paraglide/messages';
 import { useQueryState } from 'nuqs';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 export default function ConnectionsPage() {
@@ -35,8 +35,17 @@ export default function ConnectionsPage() {
   const trpc = useTRPC();
   const { mutateAsync: deleteConnection } = useMutation(trpc.connections.delete.mutationOptions());
   const [{ refetch: refetchThreads }] = useThreads();
-  const { isPro } = useBilling();
+  const { connections } = useBilling();
   const [, setPricingDialog] = useQueryState('pricingDialog');
+
+  // Allow first connection free - check remaining quota
+  const canCreateConnection = useMemo(() => {
+    if (connections?.unlimited) return true;
+    if (connections?.remaining && connections.remaining > 0) return true;
+    // If no billing data yet, allow first connection if user has no connections
+    if (!connections && (!data?.connections || data.connections.length === 0)) return true;
+    return false;
+  }, [connections, data?.connections]);
   const disconnectAccount = async (connectionId: string) => {
     await deleteConnection(
       { connectionId },
@@ -201,7 +210,7 @@ export default function ConnectionsPage() {
           ) : null}
 
           <div className="flex items-center justify-start">
-            {isPro ? (
+            {canCreateConnection ? (
               <AddConnectionDialog>
                 <Button
                   variant="outline"

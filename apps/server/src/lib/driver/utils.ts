@@ -22,7 +22,16 @@ export const deleteActiveConnection = async () => {
   }
 };
 
-export const fromBase64Url = (str: string) => str.replace(/-/g, '+').replace(/_/g, '/');
+export const fromBase64Url = (str: string) => {
+  // Convert URL-safe base64 to standard base64
+  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  // Add padding if needed
+  const pad = base64.length % 4;
+  if (pad) {
+    base64 += '='.repeat(4 - pad);
+  }
+  return base64;
+};
 
 export const fromBinary = (str: string) =>
   new TextDecoder().decode(toByteArray(str.replace(/-/g, '+').replace(/_/g, '/')));
