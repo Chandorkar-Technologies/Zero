@@ -215,12 +215,12 @@ export function ThreadDisplay() {
 
   const animationsEnabled = useAnimations();
 
-  // Collect all attachments from all messages in the thread
+  // Collect all attachments from all messages in the thread (with messageId for fetching)
   const allThreadAttachments = useMemo(() => {
     if (!emailData?.messages) return [];
-    return emailData.messages.reduce<Attachment[]>((acc, message) => {
+    return emailData.messages.reduce<(Attachment & { messageId: string })[]>((acc, message) => {
       if (message.attachments && message.attachments.length > 0) {
-        acc.push(...message.attachments);
+        acc.push(...message.attachments.map(att => ({ ...att, messageId: message.id })));
       }
       return acc;
     }, []);
@@ -1116,7 +1116,7 @@ interface MessageListProps {
   messages: ParsedMessage[];
   isFullscreen: boolean;
   totalReplies?: number;
-  allThreadAttachments?: Attachment[];
+  allThreadAttachments?: (Attachment & { messageId: string })[];
   mode?: string;
   activeReplyId?: string;
   isMobile: boolean;

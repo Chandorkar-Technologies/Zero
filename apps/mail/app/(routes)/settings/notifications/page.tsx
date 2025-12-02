@@ -22,7 +22,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { useForm } from 'react-hook-form';
-import { Bell, BellOff, Smartphone, Trash2, Loader2 } from 'lucide-react';
+import { Bell, BellOff, Smartphone, Trash2, Loader2, Send } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import * as z from 'zod';
@@ -100,6 +100,18 @@ export default function NotificationsPage() {
       },
       onError: (error) => {
         toast.error(`Failed to remove device: ${error.message}`);
+      },
+    }),
+  );
+
+  // Send test notification mutation
+  const sendTestNotificationMutation = useMutation(
+    trpc.push.sendTestNotification.mutationOptions({
+      onSuccess: () => {
+        toast.success('Test notification sent! Check your notifications.');
+      },
+      onError: (error) => {
+        toast.error(`Failed to send test notification: ${error.message}`);
       },
     }),
   );
@@ -328,14 +340,29 @@ export default function NotificationsPage() {
                         </p>
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => deleteSubscriptionMutation.mutate({ subscriptionId: sub.id })}
-                      disabled={deleteSubscriptionMutation.isPending}
-                    >
-                      <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => sendTestNotificationMutation.mutate({ subscriptionId: sub.id })}
+                        disabled={sendTestNotificationMutation.isPending}
+                        title="Send test notification"
+                      >
+                        {sendTestNotificationMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Send className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => deleteSubscriptionMutation.mutate({ subscriptionId: sub.id })}
+                        disabled={deleteSubscriptionMutation.isPending}
+                      >
+                        <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>

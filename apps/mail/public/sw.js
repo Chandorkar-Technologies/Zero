@@ -54,7 +54,25 @@ self.addEventListener('push', (event) => {
     requireInteraction: false,
   };
 
-  event.waitUntil(self.registration.showNotification(data.title, options));
+  // For Electron, send message to main window to show native notification
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      // Send to all clients (including Electron window)
+      clients.forEach((client) => {
+        client.postMessage({
+          type: 'PUSH_NOTIFICATION',
+          title: data.title,
+          body: data.body,
+          icon: data.icon,
+          tag: data.tag,
+          data: data.data,
+        });
+      });
+
+      // Also show via service worker for PWA/browser
+      return self.registration.showNotification(data.title, options);
+    }),
+  );
 });
 
 // Notification click event - handle user interaction with notification

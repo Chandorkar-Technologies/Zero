@@ -7,6 +7,11 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.send('set-badge-count', count);
   },
 
+  // Show native notification
+  showNotification: (title, options) => {
+    ipcRenderer.send('show-notification', { title, ...options });
+  },
+
   // Check if running in Electron
   isElectron: true,
 

@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nubo-router",
+  "compatibility_date": "2024-11-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "src/workers/api-router.ts",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "VITE_PUBLIC_APP_URL": "https://nubo.email",
+    "COOKIE_DOMAIN": ".nubo.email",
+    "AUTH_WORKER_URL": "https://nubo-auth.ninad2471.workers.dev",
+    "TRPC_WORKER_URL": "https://nubo-trpc.ninad2471.workers.dev",
+    "WEBHOOKS_WORKER_URL": "https://nubo-webhooks.ninad2471.workers.dev"
+  }
+}

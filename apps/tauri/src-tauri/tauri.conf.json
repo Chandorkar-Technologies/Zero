@@ -1,0 +1,76 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Nubo",
+  "identifier": "email.nubo.mail",
+  "version": "1.0.0",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self' https://nubo.email https://*.nubo.email; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://nubo.email https://*.nubo.email; style-src 'self' 'unsafe-inline' https://nubo.email https://*.nubo.email; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; frame-src 'self' https:;"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": false,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "exceptionDomain": "",
+      "signingIdentity": null,
+      "providerShortName": null,
+      "entitlements": null
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    },
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": true
+      }
+    },
+    "iOS": {
+      "developmentTeam": null
+    }
+  },
+  "plugins": {
+    "notification": {
+      "all": true
+    },
+    "shell": {
+      "open": true
+    },
+    "deep-link": {
+      "mobile": [
+        {
+          "host": "nubo.email",
+          "pathPrefix": ["/"]
+        }
+      ],
+      "desktop": {
+        "schemes": ["mailto", "nubo"]
+      }
+    },
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://releases.nubo.email/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

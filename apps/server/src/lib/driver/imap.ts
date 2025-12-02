@@ -251,35 +251,51 @@ export class ImapMailManager implements MailManager {
         const imapServiceUrl = env.IMAP_SERVICE_URL;
         const imapServiceApiKey = env.IMAP_SERVICE_API_KEY;
 
+        console.log(`[IMAP Driver] IMAP_SERVICE_URL defined: ${!!imapServiceUrl}, IMAP_SERVICE_API_KEY defined: ${!!imapServiceApiKey}`);
+
         if (imapServiceUrl && imapServiceApiKey) {
             // Use the IMAP service HTTP endpoint for SMTP sending
             console.log(`[IMAP Driver] Sending email via IMAP service: ${imapServiceUrl}`);
 
             try {
+                console.log(`[IMAP Driver] Making request to: ${imapServiceUrl}/send`);
+                const requestBody = {
+                    connectionId,
+                    from: fromEmail,
+                    to: data.to.map(t => t.email),
+                    cc: data.cc?.map(t => t.email),
+                    bcc: data.bcc?.map(t => t.email),
+                    subject: data.subject,
+                    html: data.message,
+                    text: data.message?.replace(/<[^>]*>/g, ''), // Strip HTML for text version
+                };
+                console.log(`[IMAP Driver] Request body (partial): to=${requestBody.to.join(',')}, subject=${requestBody.subject?.substring(0, 50)}`);
+
                 const response = await fetch(`${imapServiceUrl}/send`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${imapServiceApiKey}`,
                     },
-                    body: JSON.stringify({
-                        connectionId,
-                        from: fromEmail,
-                        to: data.to.map(t => t.email),
-                        cc: data.cc?.map(t => t.email),
-                        bcc: data.bcc?.map(t => t.email),
-                        subject: data.subject,
-                        html: data.message,
-                        text: data.message?.replace(/<[^>]*>/g, ''), // Strip HTML for text version
-                    }),
+                    body: JSON.stringify(requestBody),
                 });
 
+                console.log(`[IMAP Driver] Response status: ${response.status}, ok: ${response.ok}`);
+                const responseText = await response.text();
+                console.log(`[IMAP Driver] Response body: ${responseText.substring(0, 500)}`);
+
                 if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-                    throw new Error((errorData as { error?: string }).error || `HTTP ${response.status}`);
+                    let errorMessage = `HTTP ${response.status}`;
+                    try {
+                        const errorData = JSON.parse(responseText);
+                        errorMessage = errorData.error || errorMessage;
+                    } catch {
+                        errorMessage = responseText || errorMessage;
+                    }
+                    throw new Error(errorMessage);
                 }
 
-                const result = await response.json() as { messageId?: string };
+                const result = JSON.parse(responseText) as { messageId?: string };
                 console.log(`[IMAP Driver] Email sent via IMAP service: ${result.messageId}`);
                 return { id: result.messageId || `${Date.now()}@nubo.email` };
             } catch (error) {
