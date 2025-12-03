@@ -124,11 +124,13 @@ export function PromptsDialog() {
       <Dialog>
         <Tooltip>
           <TooltipTrigger asChild>
-            <DialogTrigger asChild>
-              <Button variant="ghost" className="md:h-fit md:px-2">
-                <Paper className="dark:fill-iconDark fill-iconLight h-3.5 w-3.5" />
-              </Button>
-            </DialogTrigger>
+            <span>
+              <DialogTrigger asChild>
+                <Button variant="ghost" className="md:h-fit md:px-2">
+                  <Paper className="dark:fill-iconDark fill-iconLight h-3.5 w-3.5" />
+                </Button>
+              </DialogTrigger>
+            </span>
           </TooltipTrigger>
           <TooltipContent>Prompts</TooltipContent>
         </Tooltip>

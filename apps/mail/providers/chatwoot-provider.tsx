@@ -42,15 +42,18 @@ export function ChatwootProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     // Set chatwoot settings before loading the script
+    // Note: Using type: 'expanded_bubble' ensures the widget can be toggled programmatically
     window.chatwootSettings = {
       hideMessageBubble: true, // We'll use our own button
       position: 'right',
-      type: 'standard',
+      type: 'expanded_bubble',
     };
 
     // Listen for chatwoot ready event
     const handleChatwootReady = () => {
       console.log('[Chatwoot] Widget is ready');
+      console.log('[Chatwoot] $chatwoot object:', window.$chatwoot);
+      console.log('[Chatwoot] $chatwoot methods:', window.$chatwoot ? Object.keys(window.$chatwoot) : 'N/A');
       setIsReady(true);
     };
 
@@ -113,34 +116,47 @@ export function ChatwootProvider({ children }: PropsWithChildren) {
       return;
     }
 
-    if (window.$chatwoot) {
-      console.log('[Chatwoot] Opening chat widget');
-      window.$chatwoot.toggle('open');
-    } else {
-      console.warn('[Chatwoot] $chatwoot not available yet, retrying...');
-      toast.loading('Connecting to support...', { id: 'chatwoot-loading' });
-
-      // Retry with increasing delays
-      const tryOpen = (attempt: number) => {
-        if (attempt > 5) {
-          console.error('[Chatwoot] Failed to open after 5 attempts');
-          toast.dismiss('chatwoot-loading');
-          openEmailFallback();
-          setLoadError(true);
-          return;
+    const tryToggle = () => {
+      if (window.$chatwoot && typeof window.$chatwoot.toggle === 'function') {
+        try {
+          console.log('[Chatwoot] Calling toggle("open")');
+          window.$chatwoot.toggle('open');
+          return true;
+        } catch (err) {
+          console.error('[Chatwoot] Error calling toggle:', err);
+          return false;
         }
-        setTimeout(() => {
-          if (window.$chatwoot) {
-            console.log('[Chatwoot] Opening chat widget (attempt', attempt, ')');
-            toast.dismiss('chatwoot-loading');
-            window.$chatwoot.toggle('open');
-          } else {
-            tryOpen(attempt + 1);
-          }
-        }, 500 * attempt);
-      };
-      tryOpen(1);
+      }
+      return false;
+    };
+
+    if (tryToggle()) {
+      console.log('[Chatwoot] Successfully called toggle');
+      return;
     }
+
+    console.warn('[Chatwoot] $chatwoot not available yet, retrying...');
+    toast.loading('Connecting to support...', { id: 'chatwoot-loading' });
+
+    // Retry with increasing delays
+    const tryOpen = (attempt: number) => {
+      if (attempt > 5) {
+        console.error('[Chatwoot] Failed to open after 5 attempts');
+        toast.dismiss('chatwoot-loading');
+        openEmailFallback();
+        setLoadError(true);
+        return;
+      }
+      setTimeout(() => {
+        if (tryToggle()) {
+          console.log('[Chatwoot] Opening chat widget (attempt', attempt, ')');
+          toast.dismiss('chatwoot-loading');
+        } else {
+          tryOpen(attempt + 1);
+        }
+      }, 500 * attempt);
+    };
+    tryOpen(1);
   }, [isReady, loadError]);
 
   const closeChat = useCallback(() => {

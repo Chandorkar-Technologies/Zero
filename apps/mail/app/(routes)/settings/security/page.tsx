@@ -8,10 +8,14 @@ import {
 } from '@/components/ui/form';
 import { SettingsCard } from '@/components/settings/settings-card';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useSession, authClient } from '@/lib/auth-client';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { m } from '@/paraglide/messages';
 import { useForm } from 'react-hook-form';
+import { CheckCircle, AlertCircle, Mail } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { useState } from 'react';
 import * as z from 'zod';
@@ -23,6 +27,25 @@ const formSchema = z.object({
 
 export default function SecurityPage() {
   const [isSaving, setIsSaving] = useState(false);
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
+  const { data: session } = useSession();
+
+  const handleResendVerification = async () => {
+    if (!session?.user?.email) return;
+
+    setIsResendingVerification(true);
+    try {
+      await authClient.sendVerificationEmail({
+        email: session.user.email,
+        callbackURL: `${window.location.origin}/settings/connections`,
+      });
+      toast.success('Verification email sent! Please check your inbox.');
+    } catch {
+      toast.error('Failed to send verification email. Please try again.');
+    } finally {
+      setIsResendingVerification(false);
+    }
+  };
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -44,6 +67,52 @@ export default function SecurityPage() {
 
   return (
     <div className="grid gap-6">
+      {/* Email Verification Status Card */}
+      <SettingsCard
+        title="Email Verification"
+        description="Verify your email address to secure your account."
+      >
+        <div className="space-y-4">
+          {session?.user ? (
+            <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                  <Mail className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">{session.user.email}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    {session.user.emailVerified ? (
+                      <Badge variant="outline" className="text-green-600 border-green-600 gap-1">
+                        <CheckCircle className="h-3 w-3" />
+                        Verified
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-yellow-600 border-yellow-600 gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        Not verified
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {!session.user.emailVerified && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResendVerification}
+                  disabled={isResendingVerification}
+                >
+                  {isResendingVerification ? 'Sending...' : 'Resend verification email'}
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">Loading...</div>
+          )}
+        </div>
+      </SettingsCard>
+
       <SettingsCard
         title={m['pages.settings.security.title']()}
         description={m['pages.settings.security.description']()}

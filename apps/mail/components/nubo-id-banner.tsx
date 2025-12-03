@@ -41,7 +41,7 @@ export function NuboIdBanner() {
   }
 
   return (
-    <div className="bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800 px-4 py-2">
+    <div className="relative z-20 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800 px-4 py-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
           <AtSign className="h-4 w-4 flex-shrink-0" />
