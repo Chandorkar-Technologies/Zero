@@ -153,7 +153,7 @@ export class SyncThreadsWorkflow extends WorkflowEntrypoint<ZeroEnv, SyncThreads
                 {
                   id: thread.id,
                   threadId: thread.id,
-                  providerId: 'google',
+                  providerId: foundConnection.providerId,
                   latestSender: latest.sender,
                   latestReceivedOn: normalizedReceivedOn,
                   latestSubject: latest.subject,

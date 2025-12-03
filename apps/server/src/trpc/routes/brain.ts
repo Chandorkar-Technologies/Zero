@@ -36,20 +36,34 @@ export const brainRouter = router({
     )
     .query(async ({ input, ctx }) => {
       const { threadId } = input;
-      const response = await env.VECTORIZE.getByIds([threadId]);
-      if (response.length && response?.[0]?.metadata?.['summary']) {
-        const result = response[0].metadata as { summary: string; connection: string };
-        if (result.connection !== ctx.activeConnection.id) return null;
-        const shortResponse = await env.AI.run('@cf/facebook/bart-large-cnn', {
-          input_text: result.summary,
-        });
-        return {
-          data: {
-            short: shortResponse.summary,
-          },
-        };
+
+      // Cloudflare Vectorize has a 64 byte limit for IDs
+      // Microsoft/Outlook thread IDs can be 150+ bytes
+      // Return null gracefully for IDs that are too long
+      if (threadId.length > 64) {
+        console.log(`[generateSummary] Thread ID too long (${threadId.length} bytes), skipping vectorize lookup`);
+        return null;
       }
-      return null;
+
+      try {
+        const response = await env.VECTORIZE.getByIds([threadId]);
+        if (response.length && response?.[0]?.metadata?.['summary']) {
+          const result = response[0].metadata as { summary: string; connection: string };
+          if (result.connection !== ctx.activeConnection.id) return null;
+          const shortResponse = await env.AI.run('@cf/facebook/bart-large-cnn', {
+            input_text: result.summary,
+          });
+          return {
+            data: {
+              short: shortResponse.summary,
+            },
+          };
+        }
+        return null;
+      } catch (error) {
+        console.error('[generateSummary] Vectorize error:', error);
+        return null;
+      }
     }),
   getState: activeConnectionProcedure.query(async ({ ctx }) => {
     const connection = ctx.activeConnection;
