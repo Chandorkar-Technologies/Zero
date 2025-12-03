@@ -1256,16 +1256,23 @@ export class OutlookMailManager implements MailManager {
       return await Promise.resolve(fn());
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
-      // Adapt error checking for Microsoft Graph errors
+      // Only treat authentication-related errors as fatal
+      // DO NOT delete connection for general 4xx errors like 400, 404, etc.
+      // Only 401 (Unauthorized) indicates invalid/expired tokens
+      const errorMessage = (error.message || '').toLowerCase();
       const isFatal =
         FatalErrors.includes(error.message) ||
-        (error.statusCode >= 400 && error.statusCode < 500 && error.statusCode !== 429); // Consider 4xx errors other than 429 as potentially fatal depending on the error
+        error.statusCode === 401 ||
+        errorMessage.includes('invalid_grant') ||
+        errorMessage.includes('invalid_client') ||
+        errorMessage.includes('unauthorized');
+
       console.error(
         `[${isFatal ? 'FATAL_ERROR' : 'ERROR'}] [Outlook Driver] Operation: ${operation}`,
         {
           error: error.message,
-          code: error.code, // Graph errors might have error.code
-          statusCode: error.statusCode, // Graph errors have status codes
+          code: error.code,
+          statusCode: error.statusCode,
           context: sanitizeContext(context),
           stack: error.stack,
           isFatal,
@@ -1284,9 +1291,15 @@ export class OutlookMailManager implements MailManager {
       return fn();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
+      // Only treat authentication-related errors as fatal
+      const errorMessage = (error.message || '').toLowerCase();
       const isFatal =
         FatalErrors.includes(error.message) ||
-        (error.statusCode >= 400 && error.statusCode < 500 && error.statusCode !== 429);
+        error.statusCode === 401 ||
+        errorMessage.includes('invalid_grant') ||
+        errorMessage.includes('invalid_client') ||
+        errorMessage.includes('unauthorized');
+
       console.error(`[Outlook Driver Error] Operation: ${operation}`, {
         error: error.message,
         code: error.code,
