@@ -344,9 +344,22 @@ class ZeroDB extends DurableObject<ZeroEnv> {
   }
 
   async findManyConnections(userId: string): Promise<(typeof connection.$inferSelect)[]> {
-    return await this.db.query.connection.findMany({
+    const connections = await this.db.query.connection.findMany({
       where: eq(connection.userId, userId),
     });
+
+    // Debug: Log each connection's token state
+    console.log('[ZeroDB.findManyConnections] Raw query results:', connections.map(c => ({
+      id: c.id,
+      email: c.email,
+      providerId: c.providerId,
+      hasAccessToken: !!c.accessToken,
+      hasRefreshToken: !!c.refreshToken,
+      accessTokenLength: c.accessToken?.length,
+      refreshTokenLength: c.refreshToken?.length,
+    })));
+
+    return connections;
   }
 
   async createKanbanBoard(
@@ -680,25 +693,99 @@ class ZeroDB extends DurableObject<ZeroEnv> {
       scope: string;
     },
   ): Promise<{ id: string }[]> {
-    return await this.db
-      .insert(connection)
-      .values({
-        ...updatingInfo,
-        providerId,
-        id: crypto.randomUUID(),
-        email,
-        userId,
-        createdAt: new Date(),
+    console.log('[ZeroDB.createConnection] Called with:', {
+      providerId,
+      email,
+      userId,
+      hasAccessToken: !!updatingInfo.accessToken,
+      hasRefreshToken: !!updatingInfo.refreshToken,
+      accessTokenLength: updatingInfo.accessToken?.length,
+      refreshTokenLength: updatingInfo.refreshToken?.length,
+      scope: updatingInfo.scope,
+    });
+
+    // Check if connection already exists
+    const existingConnection = await this.db.query.connection.findFirst({
+      where: and(eq(connection.email, email), eq(connection.userId, userId)),
+    });
+
+    console.log('[ZeroDB.createConnection] EXISTING connection:', {
+      exists: !!existingConnection,
+      existingId: existingConnection?.id,
+      existingHasAccessToken: !!existingConnection?.accessToken,
+      existingHasRefreshToken: !!existingConnection?.refreshToken,
+      existingProviderId: existingConnection?.providerId,
+    });
+
+    let result: { id: string }[];
+
+    if (existingConnection) {
+      // UPDATE existing connection - only update provided fields
+      const updateFields: Partial<typeof connection.$inferInsert> = {
+        name: updatingInfo.name,
+        picture: updatingInfo.picture,
+        scope: updatingInfo.scope,
+        expiresAt: updatingInfo.expiresAt,
         updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [connection.email, connection.userId],
-        set: {
-          ...updatingInfo,
+      };
+
+      // Only update tokens if they're explicitly provided (not undefined)
+      if (updatingInfo.accessToken !== undefined) {
+        updateFields.accessToken = updatingInfo.accessToken;
+      }
+      if (updatingInfo.refreshToken !== undefined) {
+        updateFields.refreshToken = updatingInfo.refreshToken;
+      }
+
+      console.log('[ZeroDB.createConnection] UPDATING existing connection:', {
+        connectionId: existingConnection.id,
+        updateKeys: Object.keys(updateFields),
+        hasAccessTokenInUpdate: 'accessToken' in updateFields,
+        hasRefreshTokenInUpdate: 'refreshToken' in updateFields,
+      });
+
+      await this.db
+        .update(connection)
+        .set(updateFields)
+        .where(eq(connection.id, existingConnection.id));
+
+      result = [{ id: existingConnection.id }];
+    } else {
+      // INSERT new connection
+      console.log('[ZeroDB.createConnection] INSERTING new connection');
+
+      result = await this.db
+        .insert(connection)
+        .values({
+          id: crypto.randomUUID(),
+          providerId,
+          email,
+          userId,
+          name: updatingInfo.name,
+          picture: updatingInfo.picture,
+          scope: updatingInfo.scope,
+          expiresAt: updatingInfo.expiresAt,
+          accessToken: updatingInfo.accessToken,
+          refreshToken: updatingInfo.refreshToken,
+          createdAt: new Date(),
           updatedAt: new Date(),
-        },
-      })
-      .returning({ id: connection.id });
+        })
+        .returning({ id: connection.id });
+    }
+
+    // Check connection AFTER operation
+    const afterConnection = await this.db.query.connection.findFirst({
+      where: eq(connection.id, result[0]?.id),
+    });
+    console.log('[ZeroDB.createConnection] AFTER operation:', {
+      connectionId: result[0]?.id,
+      providerId,
+      email,
+      afterHasAccessToken: !!afterConnection?.accessToken,
+      afterHasRefreshToken: !!afterConnection?.refreshToken,
+    });
+
+    return result;
   }
 
   async findConnectionById(
