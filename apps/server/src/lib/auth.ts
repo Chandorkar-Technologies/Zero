@@ -105,17 +105,37 @@ const generateUsername = (email: string): string => {
 };
 
 const connectionHandlerHook = async (account: Account) => {
+  console.log('[connectionHandlerHook] START - Received account:', {
+    id: account.id,
+    accountId: account.accountId,
+    providerId: account.providerId,
+    userId: account.userId,
+    hasAccessToken: !!account.accessToken,
+    hasRefreshToken: !!account.refreshToken,
+    accessTokenLength: account.accessToken?.length,
+    refreshTokenLength: account.refreshToken?.length,
+    accessTokenExpiresAt: account.accessTokenExpiresAt,
+    // Debug: check if tokens are explicitly undefined vs just falsy
+    accessTokenIsUndefined: account.accessToken === undefined,
+    refreshTokenIsUndefined: account.refreshToken === undefined,
+  });
+
   // Skip credential-based accounts (email/password sign-up)
   // Only process OAuth social provider accounts
   if (account.providerId === 'credential') {
+    console.log('[connectionHandlerHook] Skipping credential provider');
     return;
   }
 
+  // IMPORTANT: Only process if tokens are present
+  // If this hook is triggered by an account update that doesn't include tokens,
+  // we should NOT overwrite existing tokens in the connection table
   if (!account.accessToken || !account.refreshToken) {
-    console.error('Missing Access/Refresh Tokens', { account });
-    throw new APIError('EXPECTATION_FAILED', {
-      message: 'Missing Access/Refresh Tokens, contact us on Discord for support',
+    console.log('[connectionHandlerHook] No tokens in account update - SKIPPING to preserve existing connection tokens', {
+      providerId: account.providerId,
+      accountId: account.id,
     });
+    return; // Don't throw error, just skip - this might be a non-token update
   }
 
   const driver = createDriver(account.providerId, {
@@ -177,7 +197,8 @@ const connectionHandlerHook = async (account: Account) => {
   // }
 
   // Queue Gmail subscription if service account is configured and queue is available
-  if (env.GOOGLE_S_ACCOUNT && env.GOOGLE_S_ACCOUNT !== '{}' && env.subscribe_queue) {
+  // Note: Only Google connections should be queued - Microsoft doesn't have subscription factory yet
+  if (env.GOOGLE_S_ACCOUNT && env.GOOGLE_S_ACCOUNT !== '{}' && env.subscribe_queue && account.providerId === 'google') {
     await env.subscribe_queue.send({
       connectionId: result.id,
       providerId: account.providerId,

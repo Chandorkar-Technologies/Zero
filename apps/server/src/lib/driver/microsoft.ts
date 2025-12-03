@@ -15,27 +15,64 @@ import type { IOutgoingMessage, Label, ParsedMessage } from '../../types';
 import { sanitizeTipTapHtml } from '../sanitize-tip-tap-html';
 import { Client } from '@microsoft/microsoft-graph-client';
 import type { MailManager, ManagerConfig } from './types';
-import { getContext } from 'hono/context-storage';
 import type { CreateDraftData } from '../schemas';
-import type { HonoContext } from '../../ctx';
+import { env } from '../../env';
 import * as he from 'he';
 
 export class OutlookMailManager implements MailManager {
   private graphClient: Client;
+  private currentAccessToken: string;
+  private tokenExpiresAt: number = 0;
+  private folderIdToNameCache: Map<string, string> = new Map();
+  private folderCacheInitialized: boolean = false;
 
   constructor(public config: ManagerConfig) {
-    const getAccessToken = async () => {
-      const c = getContext<HonoContext>();
-      const data = await c.var.auth.api.getAccessToken({
-        body: {
-          providerId: 'microsoft',
-          userId: config.auth.userId,
-          // accountId: config.auth.accountId,
-        },
-        headers: c.req.raw.headers,
+    this.currentAccessToken = config.auth.accessToken || '';
+    // Assume token is valid for 1 hour from now if we don't know the expiry
+    this.tokenExpiresAt = Date.now() + 3600000;
+
+    console.log('[Microsoft Driver] Initializing with config:', {
+      hasAccessToken: !!config.auth.accessToken,
+      hasRefreshToken: !!config.auth.refreshToken,
+      email: config.auth.email,
+      userId: config.auth.userId,
+    });
+
+    const getAccessToken = async (): Promise<string> => {
+      console.log('[Microsoft Driver] getAccessToken called:', {
+        hasCurrentToken: !!this.currentAccessToken,
+        tokenExpiresAt: new Date(this.tokenExpiresAt).toISOString(),
+        now: new Date().toISOString(),
+        isTokenValid: this.currentAccessToken && Date.now() < this.tokenExpiresAt - 300000,
       });
-      if (!data.accessToken) throw new Error('Failed to get access token');
-      return data.accessToken;
+
+      // Check if current token is still valid (with 5 minute buffer)
+      if (this.currentAccessToken && Date.now() < this.tokenExpiresAt - 300000) {
+        console.log('[Microsoft Driver] Using existing valid token');
+        return this.currentAccessToken;
+      }
+
+      // Token expired or about to expire, refresh it
+      if (this.config.auth.refreshToken) {
+        console.log('[Microsoft Driver] Token expired or missing, attempting refresh...');
+        try {
+          const refreshedToken = await this.refreshAccessToken();
+          return refreshedToken;
+        } catch (error) {
+          console.error('[Microsoft Driver] Token refresh failed:', error);
+          // Don't throw invalid_grant - let the Graph API error be handled properly
+          throw error;
+        }
+      }
+
+      // No refresh token available, use the current access token if available
+      if (this.currentAccessToken) {
+        console.log('[Microsoft Driver] No refresh token, using current access token');
+        return this.currentAccessToken;
+      }
+
+      console.error('[Microsoft Driver] No access token or refresh token available');
+      throw new Error('No access token available for Microsoft');
     };
 
     this.graphClient = Client.initWithMiddleware({
@@ -45,13 +82,113 @@ export class OutlookMailManager implements MailManager {
     });
   }
 
+  private async refreshAccessToken(): Promise<string> {
+    const tokenEndpoint = 'https://login.microsoftonline.com/common/oauth2/v2.0/token';
+
+    const params = new URLSearchParams({
+      client_id: env.MICROSOFT_CLIENT_ID,
+      client_secret: env.MICROSOFT_CLIENT_SECRET,
+      refresh_token: this.config.auth.refreshToken,
+      grant_type: 'refresh_token',
+      scope: this.getScope(),
+    });
+
+    console.log('[Microsoft Driver] Refreshing access token...');
+
+    const response = await fetch(tokenEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[Microsoft Driver] Token refresh failed:', response.status, errorText);
+      throw new Error(`Token refresh failed: ${response.status} ${errorText}`);
+    }
+
+    const data = await response.json() as {
+      access_token: string;
+      refresh_token?: string;
+      expires_in: number;
+    };
+
+    this.currentAccessToken = data.access_token;
+    this.tokenExpiresAt = Date.now() + (data.expires_in * 1000);
+
+    console.log('[Microsoft Driver] Token refreshed successfully, expires in', data.expires_in, 'seconds');
+
+    // If we got a new refresh token, update the config
+    if (data.refresh_token) {
+      this.config.auth.refreshToken = data.refresh_token;
+    }
+
+    return this.currentAccessToken;
+  }
+
   public getScope(): string {
     return [
+      'openid',
+      'profile',
+      'email',
+      'offline_access',
       'https://graph.microsoft.com/User.Read',
       'https://graph.microsoft.com/Mail.ReadWrite',
       'https://graph.microsoft.com/Mail.Send',
-      'offline_access',
+      'https://graph.microsoft.com/IMAP.AccessAsUser.All',
+      'https://graph.microsoft.com/SMTP.Send',
     ].join(' ');
+  }
+
+  private async initializeFolderCache(): Promise<void> {
+    if (this.folderCacheInitialized) return;
+
+    try {
+      const foldersResponse = await this.graphClient.api('/me/mailfolders').get();
+      if (foldersResponse.value) {
+        for (const folder of foldersResponse.value as MailFolder[]) {
+          if (folder.id && folder.displayName) {
+            // Map folder GUID to normalized label name
+            const displayName = folder.displayName.toLowerCase();
+            let normalizedLabel: string | null = null;
+
+            if (displayName === 'inbox') normalizedLabel = 'INBOX';
+            else if (displayName === 'sent items') normalizedLabel = 'SENT';
+            else if (displayName === 'drafts') normalizedLabel = 'DRAFTS';
+            else if (displayName === 'deleted items') normalizedLabel = 'TRASH';
+            else if (displayName === 'junk email') normalizedLabel = 'SPAM';
+            else if (displayName === 'archive') normalizedLabel = 'ARCHIVE';
+
+            if (normalizedLabel) {
+              this.folderIdToNameCache.set(folder.id, normalizedLabel);
+            }
+          }
+        }
+      }
+      this.folderCacheInitialized = true;
+      console.log('[Microsoft] Folder cache initialized with', this.folderIdToNameCache.size, 'folders');
+    } catch (error) {
+      console.error('[Microsoft] Failed to initialize folder cache:', error);
+      // Don't throw - we'll fall back to the original behavior
+    }
+  }
+
+  private getFolderLabelFromCache(folderId: string | undefined | null): string | null {
+    if (!folderId) return null;
+    return this.folderIdToNameCache.get(folderId) || null;
+  }
+
+  private getFolderLabelFromName(folderName: string): string | null {
+    const lowerName = folderName.toLowerCase();
+    if (lowerName === 'inbox') return 'INBOX';
+    if (lowerName === 'sent' || lowerName === 'sentitems') return 'SENT';
+    if (lowerName === 'drafts') return 'DRAFTS';
+    if (lowerName === 'bin' || lowerName === 'trash' || lowerName === 'deleteditems') return 'TRASH';
+    if (lowerName === 'junk' || lowerName === 'spam' || lowerName === 'junkemail') return 'SPAM';
+    if (lowerName === 'archive') return 'ARCHIVE';
+    return null;
   }
   public getAttachment(messageId: string, attachmentId: string) {
     return this.withErrorHandler(
@@ -263,6 +400,12 @@ export class OutlookMailManager implements MailManager {
     return this.withErrorHandler(
       'list',
       async () => {
+        // Initialize folder cache so we can map folder GUIDs to labels
+        await this.initializeFolderCache();
+
+        // Determine the folder label from the folder name we're querying
+        const folderLabelFromName = this.getFolderLabelFromName(folder);
+
         const res = await request.get();
 
         // console.log(JSON.stringify(res, null, 4));
@@ -270,9 +413,9 @@ export class OutlookMailManager implements MailManager {
         const messages: Message[] = res.value;
         const nextPageLink: string | undefined = res['@odata.nextLink'];
 
-        // First parse all messages to get basic info
+        // First parse all messages to get basic info, passing the folder label we know
         const parsedMessages = await Promise.all(
-          messages.map((msg) => this.parseOutlookMessage(msg)),
+          messages.map((msg) => this.parseOutlookMessage(msg, folderLabelFromName)),
         );
 
         // Then fetch full content for each message
@@ -348,10 +491,13 @@ export class OutlookMailManager implements MailManager {
     return this.withErrorHandler(
       'get',
       async () => {
+        // Initialize folder cache so we can map folder GUIDs to labels
+        await this.initializeFolderCache();
+
         const message: Message = await this.graphClient
           .api(`/me/messages/${id}`)
           .select(
-            'id,subject,body,from,toRecipients,ccRecipients,bccRecipients,sentDateTime,receivedDateTime,isRead,internetMessageId,inferenceClassification,categories,attachments',
+            'id,subject,body,from,toRecipients,ccRecipients,bccRecipients,sentDateTime,receivedDateTime,isRead,internetMessageId,inferenceClassification,categories,attachments,parentFolderId',
           )
           .get();
 
@@ -536,7 +682,33 @@ export class OutlookMailManager implements MailManager {
     return this.withErrorHandler(
       'sendDraft',
       async () => {
-        await this.graphClient.api(`/me/messages/${draftId}/send`).post({});
+        try {
+          // Try to send the existing draft
+          await this.graphClient.api(`/me/messages/${draftId}/send`).post({});
+        } catch (error: any) {
+          // If draft not found, fall back to creating and sending a new email
+          const errorMessage = error?.message || error?.body?.message || String(error);
+          const isNotFound =
+            error?.statusCode === 404 ||
+            errorMessage.includes('not found') ||
+            errorMessage.includes('ErrorItemNotFound') ||
+            errorMessage.includes('The specified object was not found');
+
+          if (isNotFound) {
+            console.warn(
+              `[Microsoft sendDraft] Draft ${draftId} not found, falling back to sendMail with data`,
+            );
+            // Fall back to creating a new email with the provided data
+            const messagePayload = await this.parseOutgoingOutlook(data);
+            await this.graphClient.api('/me/sendMail').post({
+              message: messagePayload,
+              saveToSentItems: true,
+            });
+            return;
+          }
+          // Re-throw other errors
+          throw error;
+        }
       },
       { draftId, data },
     );
@@ -994,21 +1166,25 @@ export class OutlookMailManager implements MailManager {
 
     return { folder: folderId, q: outlookQuery };
   }
-  private parseOutlookMessage({
-    id,
-    conversationId, // Use conversationId as threadId equivalent
-    subject,
-    bodyPreview, // Snippet equivalent
-    isRead,
-    from,
-    toRecipients,
-    ccRecipients,
-    bccRecipients,
-    receivedDateTime,
-    internetMessageId,
-    categories, // Outlook categories map to tags
-    // headers, // Array of Header objects (name, value), doesn't exist in Outlook
-  }: Message): Omit<
+  private parseOutlookMessage(
+    {
+      id,
+      conversationId, // Use conversationId as threadId equivalent
+      subject,
+      bodyPreview, // Snippet equivalent
+      isRead,
+      from,
+      toRecipients,
+      ccRecipients,
+      bccRecipients,
+      receivedDateTime,
+      internetMessageId,
+      categories, // Outlook categories map to tags
+      parentFolderId, // Folder ID to map to labels like INBOX
+      // headers, // Array of Header objects (name, value), doesn't exist in Outlook
+    }: Message,
+    knownFolderLabel?: string | null,
+  ): Omit<
     ParsedMessage,
     'body' | 'processedHtml' | 'blobUrl' | 'totalReplies' | 'attachments'
   > {
@@ -1038,16 +1214,51 @@ export class OutlookMailManager implements MailManager {
         email: rec.emailAddress?.address || '',
       })) || [];
 
-    const tags: Label[] =
-      (categories || []).map((cat) => ({
-        id: cat,
-        name: cat,
-        type: 'category',
+    const tags: Label[] = [];
+
+    // Determine folder label: use known label from caller, then try cache, then fallback
+    let folderLabel = knownFolderLabel || this.getFolderLabelFromCache(parentFolderId);
+
+    // Add folder as a label (INBOX, SENT, etc.)
+    if (folderLabel) {
+      tags.push({
+        id: folderLabel,
+        name: folderLabel,
+        type: 'system',
         color: {
           backgroundColor: '',
           textColor: '',
         },
-      })) || [];
+      });
+    }
+
+    // Add UNREAD label if message is unread
+    if (!isRead) {
+      tags.push({
+        id: 'UNREAD',
+        name: 'UNREAD',
+        type: 'system',
+        color: {
+          backgroundColor: '',
+          textColor: '',
+        },
+      });
+    }
+
+    // Add categories as additional labels
+    if (categories && categories.length > 0) {
+      for (const cat of categories) {
+        tags.push({
+          id: cat,
+          name: cat,
+          type: 'category',
+          color: {
+            backgroundColor: '',
+            textColor: '',
+          },
+        });
+      }
+    }
 
     const references: string | undefined = undefined;
     const inReplyTo: string | undefined = undefined;
@@ -1246,10 +1457,20 @@ export class OutlookMailManager implements MailManager {
       return await Promise.resolve(fn());
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
-      // Adapt error checking for Microsoft Graph errors
+      // Only treat permanent authentication failures as fatal
+      // DO NOT delete connection for:
+      // - Temporary 401s that might be fixed by token refresh
+      // - General 4xx errors like 400, 404, etc.
+      // Only delete for permanent auth failures like invalid_grant (refresh token revoked)
+      const errorMessage = (error.message || '').toLowerCase();
+
+      // Only invalid_grant and invalid_client are truly fatal (refresh token is gone)
+      // Don't treat 401 or "unauthorized" as fatal - they might be temporary
       const isFatal =
         FatalErrors.includes(error.message) ||
-        (error.statusCode >= 400 && error.statusCode < 500 && error.statusCode !== 429); // Consider 4xx errors other than 429 as potentially fatal depending on the error
+        errorMessage.includes('invalid_grant') ||
+        errorMessage.includes('invalid_client');
+
       console.error(
         `[${isFatal ? 'FATAL_ERROR' : 'ERROR'}] [Outlook Driver] Operation: ${operation}`,
         {
@@ -1259,9 +1480,15 @@ export class OutlookMailManager implements MailManager {
           context: sanitizeContext(context),
           stack: error.stack,
           isFatal,
+          willDeleteConnection: isFatal,
         },
       );
-      if (isFatal) await deleteActiveConnection();
+
+      // Only delete connection for truly fatal errors (refresh token invalidated)
+      if (isFatal) {
+        console.log('[Outlook Driver] Deleting connection due to fatal error');
+        await deleteActiveConnection();
+      }
       throw new StandardizedError(error, operation, context);
     }
   }
@@ -1274,9 +1501,15 @@ export class OutlookMailManager implements MailManager {
       return fn();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
+      // Only treat permanent authentication failures as fatal
+      const errorMessage = (error.message || '').toLowerCase();
+
+      // Only invalid_grant and invalid_client are truly fatal
       const isFatal =
         FatalErrors.includes(error.message) ||
-        (error.statusCode >= 400 && error.statusCode < 500 && error.statusCode !== 429);
+        errorMessage.includes('invalid_grant') ||
+        errorMessage.includes('invalid_client');
+
       console.error(`[Outlook Driver Error] Operation: ${operation}`, {
         error: error.message,
         code: error.code,
@@ -1284,6 +1517,7 @@ export class OutlookMailManager implements MailManager {
         context: sanitizeContext(context),
         stack: error.stack,
         isFatal,
+        willDeleteConnection: isFatal,
       });
       if (isFatal) void deleteActiveConnection();
       throw new StandardizedError(error, operation, context);
