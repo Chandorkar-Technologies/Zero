@@ -15,7 +15,7 @@ import {
   LockIcon,
   Clock,
 } from '@/components/icons/icons';
-import { MessageSquareIcon, Video, HardDrive, KanbanSquare, UserCircle, Bell, Paperclip, Headset, MessageCircle } from 'lucide-react';
+import { MessageSquareIcon, Video, HardDrive, KanbanSquare, UserCircle, Bell, Paperclip, Headset, MessageCircle, AtSign } from 'lucide-react';
 import { m } from '@/paraglide/messages';
 
 export interface NavItem {
@@ -233,7 +233,11 @@ export const navigationConfig: Record<string, NavConfig> = {
             icon: ArrowLeft,
             isBackButton: true,
           },
-
+          {
+            title: 'Nubo Account',
+            url: '/settings/nubo-account',
+            icon: AtSign,
+          },
           {
             title: m['navigation.settings.general'](),
             url: '/settings/general',

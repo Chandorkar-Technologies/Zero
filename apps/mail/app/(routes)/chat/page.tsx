@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import {
   ArrowLeft,
@@ -8,25 +9,32 @@ import {
   ExternalLink,
   Maximize2,
   Minimize2,
+  Settings,
+  Loader2,
+  AtSign,
 } from 'lucide-react';
-import { useSession } from '@/lib/auth-client';
-import { useActiveConnection } from '@/hooks/use-connections';
+import { useTRPC } from '@/providers/query-provider';
 import { cn } from '@/lib/utils';
 
 const ROCKET_CHAT_URL = 'https://chat.nubo.email';
 
 export default function NuboChatPage() {
   const navigate = useNavigate();
-  const { data: session } = useSession();
-  const { data: activeConnection } = useActiveConnection();
+  const trpc = useTRPC();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [authToken, _setAuthToken] = useState<string | null>(null);
 
-  // Check if user has @nubo.email address
-  const userEmail = activeConnection?.email || session?.user?.email || '';
-  const isNuboUser = userEmail.endsWith('@nubo.email');
+  // Fetch Nubo username
+  const { data: usernameData, isLoading: isUsernameLoading } = useQuery(
+    trpc.drive.getMyUsername.queryOptions(void 0, {
+      retry: false,
+    }),
+  );
+
+  const nuboUsername = usernameData?.username;
+  const hasNuboAccount = !!nuboUsername;
 
   // Handle iframe load
   const handleIframeLoad = useCallback(() => {
@@ -72,8 +80,32 @@ export default function NuboChatPage() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen]);
 
-  // Non-nubo user view
-  if (!isNuboUser) {
+  // Loading state while checking username
+  if (isUsernameLoading) {
+    return (
+      <div className="flex h-full w-full flex-col bg-background">
+        <div className="border-b p-4">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/mail/inbox')}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Inbox
+            </Button>
+            <div className="flex items-center gap-2">
+              <MessageCircle className="h-6 w-6" />
+              <h1 className="text-2xl font-bold">Nubo Chat</h1>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-1 flex-col items-center justify-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // No Nubo account - redirect to settings
+  if (!hasNuboAccount) {
     return (
       <div className="flex h-full w-full flex-col bg-background">
         {/* Header */}
@@ -90,24 +122,25 @@ export default function NuboChatPage() {
           </div>
         </div>
 
-        {/* Access Denied Content */}
+        {/* Setup Required Content */}
         <div className="flex flex-1 flex-col items-center justify-center gap-6 p-8">
-          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-muted">
-            <MessageCircle className="h-12 w-12 text-muted-foreground" />
+          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-primary/10">
+            <AtSign className="h-12 w-12 text-primary" />
           </div>
-          <div className="text-center">
-            <h2 className="text-2xl font-semibold">Nubo Chat Access Required</h2>
-            <p className="mt-2 text-muted-foreground max-w-md">
-              Nubo Chat is available exclusively for users with a <span className="font-medium">@nubo.email</span> address.
-              Connect your Nubo email account to start chatting with other Nubo users.
+          <div className="text-center max-w-md">
+            <h2 className="text-2xl font-semibold">Set Up Your Nubo Account</h2>
+            <p className="mt-2 text-muted-foreground">
+              To use Nubo Chat, you need to set up your Nubo username first.
+              This will be your identity across all Nubo services.
             </p>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => navigate('/settings/connections')}>
-              Manage Connections
-            </Button>
-            <Button onClick={() => navigate('/mail/inbox')}>
+            <Button variant="outline" onClick={() => navigate('/mail/inbox')}>
               Back to Inbox
+            </Button>
+            <Button onClick={() => navigate('/settings/nubo-account')}>
+              <Settings className="mr-2 h-4 w-4" />
+              Set Up Nubo Account
             </Button>
           </div>
         </div>
@@ -135,7 +168,7 @@ export default function NuboChatPage() {
               <h1 className="text-2xl font-bold">Nubo Chat</h1>
             </div>
             <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900 dark:text-green-300">
-              {userEmail}
+              {nuboUsername}@nubo.email
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -157,7 +190,7 @@ export default function NuboChatPage() {
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
             <div className="flex flex-col items-center gap-4">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="text-muted-foreground">Loading Nubo Chat...</p>
             </div>
           </div>

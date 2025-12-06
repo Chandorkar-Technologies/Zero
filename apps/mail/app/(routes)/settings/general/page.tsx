@@ -16,17 +16,17 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useForm, type ControllerRenderProps } from 'react-hook-form';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SettingsCard } from '@/components/settings/settings-card';
 import { useEmailAliases } from '@/hooks/use-email-aliases';
-import { Globe, Clock, Mail, InfoIcon, AtSign } from 'lucide-react';
+import { Globe, Clock, Mail, InfoIcon } from 'lucide-react';
 import { getLocale, setLocale } from '@/paraglide/runtime';
 import { useState, useEffect, useMemo, memo } from 'react';
 import { userSettingsSchema } from '@zero/server/schemas';
 import { locales } from '@/project.inlang/settings.json';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useTRPC, trpcClient } from '@/providers/query-provider';
+import { useTRPC } from '@/providers/query-provider';
 import { getBrowserTimezone } from '@/lib/timezones';
 
 import { useSettings } from '@/hooks/use-settings';
@@ -319,67 +319,6 @@ export default function GeneralPage() {
     [],
   );
 
-  // Username state and handlers
-  const [newUsername, setNewUsername] = useState('');
-  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
-  const [checkingUsername, setCheckingUsername] = useState(false);
-  const [savingUsername, setSavingUsername] = useState(false);
-
-  // Fetch current username - using trpc directly since the endpoints are in drive router
-  const { data: usernameData, refetch: refetchUsername, isLoading: isUsernameLoading } = useQuery(
-    trpc.drive.getMyUsername.queryOptions(void 0, {
-      retry: false,
-    }),
-  );
-
-  // Set initial username value when data loads
-  useEffect(() => {
-    if (usernameData?.username) {
-      setNewUsername(usernameData.username);
-    }
-  }, [usernameData?.username]);
-
-  // Check username availability with debounce
-  useEffect(() => {
-    if (!newUsername || newUsername === usernameData?.username) {
-      setUsernameAvailable(null);
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      if (newUsername.length < 3) {
-        setUsernameAvailable(false);
-        return;
-      }
-      setCheckingUsername(true);
-      try {
-        const result = await trpcClient.drive.checkUsername.query({ username: newUsername });
-        setUsernameAvailable(result.available);
-      } catch {
-        setUsernameAvailable(false);
-      } finally {
-        setCheckingUsername(false);
-      }
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [newUsername, usernameData?.username]);
-
-  const handleSaveUsername = async () => {
-    if (!newUsername || newUsername.length < 3 || !usernameAvailable) return;
-    setSavingUsername(true);
-    try {
-      await trpcClient.drive.setUsername.mutate({ username: newUsername });
-      await refetchUsername();
-      toast.success('Username updated successfully');
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update username';
-      toast.error(errorMessage);
-    } finally {
-      setSavingUsername(false);
-    }
-  };
-
   return (
     <div className="grid gap-6">
       <SettingsCard
@@ -433,76 +372,6 @@ export default function GeneralPage() {
             <FormField control={form.control} name="animations" render={renderAnimationsField} />
           </form>
         </Form>
-      </SettingsCard>
-
-      {/* Username Settings Card */}
-      <SettingsCard
-        title="Nubo Username"
-        description="Your unique Nubo username for sharing and collaboration."
-        footer={
-          !usernameData?.username && newUsername && usernameAvailable ? (
-            <Button onClick={handleSaveUsername} disabled={savingUsername}>
-              {savingUsername ? 'Saving...' : 'Set Username'}
-            </Button>
-          ) : null
-        }
-      >
-        <div className="space-y-4">
-          {isUsernameLoading ? (
-            <div className="text-sm text-muted-foreground">
-              Loading username...
-            </div>
-          ) : usernameData?.username ? (
-            <div className="rounded-lg bg-muted/50 p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <AtSign className="h-5 w-5 text-primary" />
-                <span className="text-lg font-medium">{usernameData.username}@nubo.email</span>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                This is your permanent Nubo address. Others can use this to share files and documents with you.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Set your unique Nubo username. This will be your permanent address for sharing.
-              </p>
-              <div className="flex flex-col gap-2 max-w-md">
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <input
-                      type="text"
-                      value={newUsername}
-                      onChange={(e) => setNewUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-                      placeholder="username"
-                      className="w-full pl-9 pr-24 h-10 rounded-md border border-input bg-background text-sm"
-                      maxLength={30}
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                      @nubo.email
-                    </span>
-                  </div>
-                </div>
-                {newUsername && newUsername.length >= 3 && (
-                  <p className={cn(
-                    "text-xs",
-                    usernameAvailable === true ? "text-green-600" : usernameAvailable === false ? "text-red-600" : "text-muted-foreground"
-                  )}>
-                    {checkingUsername ? "Checking availability..." :
-                     usernameAvailable === true ? "Username is available!" :
-                     usernameAvailable === false ? "Username is not available" : ""}
-                  </p>
-                )}
-                {newUsername && newUsername.length < 3 && (
-                  <p className="text-xs text-muted-foreground">
-                    Username must be at least 3 characters
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
       </SettingsCard>
     </div>
   );
