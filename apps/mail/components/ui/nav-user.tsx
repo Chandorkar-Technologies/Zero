@@ -403,6 +403,7 @@ export function NavUser() {
                   </div>
                 </div>
               )}
+              {/* Show first 2 other connections inline */}
               {otherConnections.slice(0, 2).map((connection) => (
                 <Tooltip key={connection.id}>
                   <TooltipTrigger asChild>
@@ -442,26 +443,31 @@ export function NavUser() {
                 </Tooltip>
               ))}
 
-              {otherConnections.length > 3 && (
+              {/* Show +N dropdown for remaining connections (Google-style account selector) */}
+              {otherConnections.length > 2 && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="hover:bg-muted flex h-7 w-7 cursor-pointer items-center justify-center rounded-[5px]">
-                      <span className="text-[10px]">+{otherConnections.length - 3}</span>
+                    <button className="hover:bg-muted flex h-7 w-7 cursor-pointer items-center justify-center rounded-[5px] border border-dashed border-gray-300 dark:border-gray-600">
+                      <span className="text-muted-foreground text-[10px] font-medium">+{otherConnections.length - 2}</span>
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
-                    className="ml-3 min-w-56 bg-white font-medium dark:bg-[#131313]"
-                    align="end"
+                    className="ml-3 min-w-64 bg-white font-medium dark:bg-[#131313]"
+                    align="start"
                     side={'bottom'}
                     sideOffset={8}
                   >
-                    {otherConnections.slice(3).map((connection) => (
+                    <p className="text-muted-foreground px-2 py-1.5 text-[11px] font-medium">
+                      {m['common.navUser.accounts']()} ({otherConnections.length - 2} more)
+                    </p>
+                    <DropdownMenuSeparator />
+                    {otherConnections.slice(2).map((connection) => (
                       <DropdownMenuItem
                         key={connection.id}
                         onClick={handleAccountSwitch(connection.id)}
-                        className="flex cursor-pointer items-center gap-3 py-1"
+                        className="flex cursor-pointer items-center gap-3 py-2"
                       >
-                        <Avatar className="size-7 rounded-lg">
+                        <Avatar className="size-8 rounded-lg">
                           <AvatarImage
                             className="rounded-lg"
                             src={connection.picture || undefined}
@@ -476,15 +482,11 @@ export function NavUser() {
                               .slice(0, 2)}
                           </AvatarFallback>
                         </Avatar>
-                        <div className="-space-y-0.5">
-                          <p className="text-[12px]">{connection.name || connection.email}</p>
-                          {connection.name && (
-                            <p className="text-muted-foreground text-[11px]">
-                              {connection.email.length > 25
-                                ? `${connection.email.slice(0, 25)}...`
-                                : connection.email}
-                            </p>
-                          )}
+                        <div className="-space-y-0.5 flex-1 min-w-0">
+                          <p className="text-[12px] font-medium truncate">{connection.name || connection.email}</p>
+                          <p className="text-muted-foreground text-[11px] truncate">
+                            {connection.email}
+                          </p>
                         </div>
                       </DropdownMenuItem>
                     ))}
