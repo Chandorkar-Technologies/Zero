@@ -197,7 +197,7 @@ export default function NuboChatPage() {
         )}
         <iframe
           ref={iframeRef}
-          src={`${ROCKET_CHAT_URL}/channel/general?layout=embedded`}
+          src={`${ROCKET_CHAT_URL}/home`}
           className="h-full w-full border-0"
           onLoad={handleIframeLoad}
           allow="camera; microphone; display-capture; autoplay; clipboard-write"
