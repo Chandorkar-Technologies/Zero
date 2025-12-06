@@ -1,4 +1,4 @@
-import express, { type Request, type Response } from 'express';
+import express, { type Request, type Response, type NextFunction } from 'express';
 import type { Logger } from 'pino';
 import { SmtpService } from './smtp-service.js';
 
@@ -52,7 +52,7 @@ export class HttpServer {
         this.app.use(express.json({ limit: '50mb' })); // Large limit for attachments
 
         // Simple API key authentication
-        this.app.use((req, res, next) => {
+        this.app.use((req: Request, res: Response, next: NextFunction) => {
             // Skip auth for health check
             if (req.path === '/health') {
                 return next();
@@ -60,12 +60,14 @@ export class HttpServer {
 
             const authHeader = req.headers.authorization;
             if (!authHeader || !authHeader.startsWith('Bearer ')) {
-                return res.status(401).json({ error: 'Missing or invalid authorization header' });
+                res.status(401).json({ error: 'Missing or invalid authorization header' });
+                return;
             }
 
             const token = authHeader.substring(7);
             if (token !== this.apiKey) {
-                return res.status(403).json({ error: 'Invalid API key' });
+                res.status(403).json({ error: 'Invalid API key' });
+                return;
             }
 
             next();

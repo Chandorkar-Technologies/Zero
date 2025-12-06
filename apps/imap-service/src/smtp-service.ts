@@ -4,13 +4,24 @@ import type { Logger } from 'pino';
 export interface SmtpConnection {
     id: string;
     config: {
-        host: string;
-        port: number;
-        secure: boolean;
+        // Direct config format (from HTTP server)
+        host?: string;
+        port?: number;
+        secure?: boolean;
         auth: {
             user: string;
             pass: string;
         };
+        // Nested format (from database connections)
+        smtp?: {
+            host: string;
+            port: number;
+            secure: boolean;
+        };
+        // Flat prefixed format (legacy)
+        smtpHost?: string;
+        smtpPort?: number;
+        smtpSecure?: boolean;
     };
 }
 
@@ -49,12 +60,12 @@ export class SmtpService {
         // Log the raw config structure to debug
         this.logger.info(`[SMTP] Raw config structure: ${JSON.stringify(config, null, 2)}`);
 
-        // IMAP connections can store SMTP config in different formats:
-        // 1. Nested: config.smtp.host, config.smtp.port, config.smtp.secure
-        // 2. Flat prefixed: config.smtpHost, config.smtpPort, config.smtpSecure
-        // Auth is stored under config.auth
-        const smtpHost = config.smtp?.host || config.smtpHost;
-        const smtpPort = config.smtp?.port || config.smtpPort;
+        // SMTP config can be in different formats:
+        // 1. Direct: config.host, config.port (from HTTP server)
+        // 2. Nested: config.smtp.host, config.smtp.port (from database)
+        // 3. Flat prefixed: config.smtpHost, config.smtpPort (legacy)
+        const smtpHost = config.host || config.smtp?.host || config.smtpHost;
+        const smtpPort = config.port || config.smtp?.port || config.smtpPort;
         const authConfig = config.auth;
 
         // Determine secure setting based on port:
@@ -67,6 +78,7 @@ export class SmtpService {
 
         if (!smtpHost || !authConfig) {
             this.logger.error(`[SMTP] Invalid config structure:`, {
+                hasHost: !!config.host,
                 hasSmtp: !!config.smtp,
                 hasSmtpHost: !!config.smtpHost,
                 hasAuth: !!config.auth,
