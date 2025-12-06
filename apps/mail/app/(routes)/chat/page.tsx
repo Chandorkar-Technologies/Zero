@@ -12,11 +12,13 @@ import {
   Settings,
   Loader2,
   AtSign,
+  AlertCircle,
 } from 'lucide-react';
 import { useTRPC } from '@/providers/query-provider';
 import { cn } from '@/lib/utils';
 
 const ROCKET_CHAT_URL = 'https://chat.nubo.email';
+const BACKEND_URL = import.meta.env.VITE_PUBLIC_BACKEND_URL || 'https://api.nubo.email';
 
 export default function NuboChatPage() {
   const navigate = useNavigate();
@@ -24,7 +26,8 @@ export default function NuboChatPage() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [authToken, _setAuthToken] = useState<string | null>(null);
+  const [rcToken, setRcToken] = useState<string | null>(null);
+  const [tokenError, setTokenError] = useState<string | null>(null);
 
   // Fetch Nubo username
   const { data: usernameData, isLoading: isUsernameLoading } = useQuery(
@@ -36,18 +39,37 @@ export default function NuboChatPage() {
   const nuboUsername = usernameData?.username;
   const hasNuboAccount = !!nuboUsername;
 
+  // Fetch Rocket.Chat token when user has Nubo account
+  useEffect(() => {
+    if (!hasNuboAccount) return;
+
+    const fetchToken = async () => {
+      try {
+        const response = await fetch(`${BACKEND_URL}/webhooks/rocketchat/token`, {
+          credentials: 'include',
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json() as { error?: string };
+          setTokenError(errorData.error || 'Failed to get chat token');
+          return;
+        }
+
+        const data = await response.json() as { token: string };
+        setRcToken(data.token);
+      } catch (error) {
+        console.error('Failed to fetch RC token:', error);
+        setTokenError('Failed to connect to chat service');
+      }
+    };
+
+    fetchToken();
+  }, [hasNuboAccount]);
+
   // Handle iframe load
   const handleIframeLoad = useCallback(() => {
     setIsLoading(false);
-
-    // If we have an auth token, try to pass it to the iframe
-    if (authToken && iframeRef.current?.contentWindow) {
-      iframeRef.current.contentWindow.postMessage({
-        externalCommand: 'login-with-token',
-        token: authToken,
-      }, ROCKET_CHAT_URL);
-    }
-  }, [authToken]);
+  }, []);
 
   // Refresh the iframe
   const handleRefresh = useCallback(() => {
@@ -80,8 +102,8 @@ export default function NuboChatPage() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen]);
 
-  // Loading state while checking username
-  if (isUsernameLoading) {
+  // Loading state while checking username or fetching token
+  if (isUsernameLoading || (hasNuboAccount && !rcToken && !tokenError)) {
     return (
       <div className="flex h-full w-full flex-col bg-background">
         <div className="border-b p-4">
@@ -98,7 +120,47 @@ export default function NuboChatPage() {
         </div>
         <div className="flex flex-1 flex-col items-center justify-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Loading...</p>
+          <p className="text-muted-foreground">
+            {isUsernameLoading ? 'Loading...' : 'Connecting to chat...'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Token error state
+  if (tokenError) {
+    return (
+      <div className="flex h-full w-full flex-col bg-background">
+        <div className="border-b p-4">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/mail/inbox')}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Inbox
+            </Button>
+            <div className="flex items-center gap-2">
+              <MessageCircle className="h-6 w-6" />
+              <h1 className="text-2xl font-bold">Nubo Chat</h1>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-1 flex-col items-center justify-center gap-6 p-8">
+          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/20">
+            <AlertCircle className="h-12 w-12 text-red-600 dark:text-red-400" />
+          </div>
+          <div className="text-center max-w-md">
+            <h2 className="text-2xl font-semibold">Connection Error</h2>
+            <p className="mt-2 text-muted-foreground">{tokenError}</p>
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => navigate('/mail/inbox')}>
+              Back to Inbox
+            </Button>
+            <Button onClick={() => window.location.reload()}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Try Again
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -197,7 +259,7 @@ export default function NuboChatPage() {
         )}
         <iframe
           ref={iframeRef}
-          src={`${ROCKET_CHAT_URL}/home`}
+          src={`${ROCKET_CHAT_URL}/home?resumeToken=${rcToken}`}
           className="h-full w-full border-0"
           onLoad={handleIframeLoad}
           allow="camera; microphone; display-capture; autoplay; clipboard-write"

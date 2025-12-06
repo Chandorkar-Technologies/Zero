@@ -121,6 +121,10 @@ export type ZeroEnv = {
 // SMTP Service for IMAP email sending (external Node.js service)
   SMTP_SERVICE_URL?: string;
   SMTP_SERVICE_API_KEY?: string;
+  // Rocket.Chat integration
+  ROCKETCHAT_URL?: string;
+  ROCKETCHAT_ADMIN_USER_ID?: string;
+  ROCKETCHAT_ADMIN_AUTH_TOKEN?: string;
 };
 
 const env = _env as ZeroEnv;

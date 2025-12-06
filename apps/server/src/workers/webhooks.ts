@@ -63,6 +63,235 @@ app.use('*', cors({
 // Health check
 app.get('/health', (c) => c.json({ message: 'Nubo Webhooks Worker is Up!' }));
 
+// ================== ROCKET.CHAT SSO ENDPOINTS ==================
+
+// Helper to make Rocket.Chat API calls
+async function rocketchatApi(
+  env: ZeroEnv,
+  endpoint: string,
+  method: 'GET' | 'POST' = 'GET',
+  body?: Record<string, unknown>,
+) {
+  const url = `${env.ROCKETCHAT_URL}/api/v1${endpoint}`;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Auth-Token': env.ROCKETCHAT_ADMIN_AUTH_TOKEN!,
+    'X-User-Id': env.ROCKETCHAT_ADMIN_USER_ID!,
+  };
+
+  const options: RequestInit = {
+    method,
+    headers,
+  };
+
+  if (method === 'POST' && body) {
+    options.body = JSON.stringify(body);
+  }
+
+  const response = await fetch(url, options);
+  return response.json();
+}
+
+// SSO endpoint - called by Rocket.Chat iframe to validate user
+// This is the API URL configured in Rocket.Chat Admin → Accounts → Iframe
+app.post('/webhooks/rocketchat/sso', async (c) => {
+  try {
+    const env = c.env;
+
+    if (!env.ROCKETCHAT_URL || !env.ROCKETCHAT_ADMIN_AUTH_TOKEN || !env.ROCKETCHAT_ADMIN_USER_ID) {
+      console.error('[ROCKETCHAT] Missing configuration');
+      return c.json({ error: 'Rocket.Chat not configured' }, 500);
+    }
+
+    // Get the auth cookie from the request (sent by iframe)
+    const cookies = c.req.header('cookie') || '';
+
+    // Forward the request to our auth endpoint to validate the session
+    const authResponse = await fetch(`${env.BASE_URL}/auth/get-session`, {
+      headers: {
+        'Cookie': cookies,
+      },
+    });
+
+    if (!authResponse.ok) {
+      return c.body('', 401);
+    }
+
+    const session = await authResponse.json() as { user?: { id: string } };
+    if (!session?.user?.id) {
+      return c.body('', 401);
+    }
+
+    // Get the user's Nubo username from database
+    const { db, conn } = await import('../db').then(m => m.createDb(env.HYPERDRIVE.connectionString));
+    const { user } = await import('../db/schema');
+    const { eq } = await import('drizzle-orm');
+
+    const nuboUser = await db.query.user.findFirst({
+      where: eq(user.id, session.user.id),
+      columns: { id: true, username: true, name: true, email: true },
+    });
+
+    await conn.end();
+
+    if (!nuboUser?.username) {
+      console.log('[ROCKETCHAT] User has no Nubo username:', session.user.id);
+      return c.body('', 401);
+    }
+
+    const rcUsername = nuboUser.username;
+    const rcEmail = `${nuboUser.username}@nubo.email`;
+    const rcName = nuboUser.name || nuboUser.username;
+
+    // Check if user exists in Rocket.Chat
+    let rcUser: any = null;
+    try {
+      const userInfo = await rocketchatApi(env, `/users.info?username=${rcUsername}`) as any;
+      if (userInfo.success && userInfo.user) {
+        rcUser = userInfo.user;
+      }
+    } catch {
+      // User doesn't exist, will be created below
+    }
+
+    // Create user if doesn't exist
+    if (!rcUser) {
+      console.log('[ROCKETCHAT] Creating user:', rcUsername);
+      const createResult = await rocketchatApi(env, '/users.create', 'POST', {
+        username: rcUsername,
+        email: rcEmail,
+        name: rcName,
+        password: crypto.randomUUID(), // Random password, user won't use it
+        verified: true,
+      }) as any;
+
+      if (!createResult.success) {
+        console.error('[ROCKETCHAT] Failed to create user:', createResult);
+        return c.body('', 401);
+      }
+      rcUser = createResult.user;
+    }
+
+    // Generate login token for the user
+    const tokenResult = await rocketchatApi(env, '/users.createToken', 'POST', {
+      userId: rcUser._id,
+    }) as any;
+
+    if (!tokenResult.success || !tokenResult.data?.authToken) {
+      console.error('[ROCKETCHAT] Failed to create token:', tokenResult);
+      return c.body('', 401);
+    }
+
+    // Return the token in the format Rocket.Chat expects
+    return c.json({
+      loginToken: tokenResult.data.authToken,
+    });
+
+  } catch (error) {
+    console.error('[ROCKETCHAT] SSO error:', error);
+    return c.body('', 401);
+  }
+});
+
+// Get Rocket.Chat token for authenticated Nubo user (called by frontend)
+app.get('/webhooks/rocketchat/token', async (c) => {
+  try {
+    const env = c.env;
+
+    if (!env.ROCKETCHAT_URL || !env.ROCKETCHAT_ADMIN_AUTH_TOKEN || !env.ROCKETCHAT_ADMIN_USER_ID) {
+      return c.json({ error: 'Rocket.Chat not configured' }, 500);
+    }
+
+    // Get the auth cookie from the request
+    const cookies = c.req.header('cookie') || '';
+
+    // Validate session
+    const authResponse = await fetch(`${env.BASE_URL}/auth/get-session`, {
+      headers: {
+        'Cookie': cookies,
+      },
+    });
+
+    if (!authResponse.ok) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    const session = await authResponse.json() as { user?: { id: string } };
+    if (!session?.user?.id) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    // Get the user's Nubo username
+    const { db, conn } = await import('../db').then(m => m.createDb(env.HYPERDRIVE.connectionString));
+    const { user } = await import('../db/schema');
+    const { eq } = await import('drizzle-orm');
+
+    const nuboUser = await db.query.user.findFirst({
+      where: eq(user.id, session.user.id),
+      columns: { id: true, username: true, name: true, email: true },
+    });
+
+    await conn.end();
+
+    if (!nuboUser?.username) {
+      return c.json({ error: 'No Nubo username set' }, 400);
+    }
+
+    const rcUsername = nuboUser.username;
+    const rcEmail = `${nuboUser.username}@nubo.email`;
+    const rcName = nuboUser.name || nuboUser.username;
+
+    // Check if user exists in Rocket.Chat
+    let rcUser: any = null;
+    try {
+      const userInfo = await rocketchatApi(env, `/users.info?username=${rcUsername}`) as any;
+      if (userInfo.success && userInfo.user) {
+        rcUser = userInfo.user;
+      }
+    } catch {
+      // User doesn't exist, will be created below
+    }
+
+    // Create user if doesn't exist
+    if (!rcUser) {
+      console.log('[ROCKETCHAT] Creating user:', rcUsername);
+      const createResult = await rocketchatApi(env, '/users.create', 'POST', {
+        username: rcUsername,
+        email: rcEmail,
+        name: rcName,
+        password: crypto.randomUUID(),
+        verified: true,
+      }) as any;
+
+      if (!createResult.success) {
+        console.error('[ROCKETCHAT] Failed to create user:', createResult);
+        return c.json({ error: 'Failed to create Rocket.Chat user' }, 500);
+      }
+      rcUser = createResult.user;
+    }
+
+    // Generate login token
+    const tokenResult = await rocketchatApi(env, '/users.createToken', 'POST', {
+      userId: rcUser._id,
+    }) as any;
+
+    if (!tokenResult.success || !tokenResult.data?.authToken) {
+      console.error('[ROCKETCHAT] Failed to create token:', tokenResult);
+      return c.json({ error: 'Failed to create token' }, 500);
+    }
+
+    return c.json({
+      token: tokenResult.data.authToken,
+      userId: rcUser._id,
+      username: rcUser.username,
+    });
+
+  } catch (error) {
+    console.error('[ROCKETCHAT] Token error:', error);
+    return c.json({ error: 'Internal error' }, 500);
+  }
+});
+
 // Recordings endpoint
 app.get('/recordings/:r2Key', async (c) => {
   try {
